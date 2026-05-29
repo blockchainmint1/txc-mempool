@@ -25,13 +25,27 @@ likes RAM during initial sync. Hetzner CCX13 / DO 4 GB / Vultr HF work fine.
 ## Quick start
 
 ```bash
-# On a fresh Ubuntu 22.04 / 24.04 box, as root or with sudo:
-git clone <this repo> && cd infra/txc-stack
+```bash
+# On a fresh Ubuntu 22.04 / 24.04 box, as root or with sudo.
+# Replace the URL with your actual repo, or scp the infra/txc-stack folder up.
+git clone https://github.com/YOUR_USER/YOUR_REPO.git
+cd YOUR_REPO/infra/txc-stack
+
 cp .env.example .env
-# Edit .env — at minimum set DOMAIN and RPC_PASSWORD
-./scripts/bootstrap.sh        # installs docker, opens firewall, certbot
-docker compose up -d          # builds texitcoind, starts the stack
-./scripts/wait-for-sync.sh    # tails logs until node is in sync
+nano .env                      # set DOMAIN, LETSENCRYPT_EMAIL, RPC_PASSWORD, MYSQL_*
+sudo ./scripts/bootstrap.sh    # installs docker, opens firewall, issues TLS cert
+docker compose up -d --build   # builds texitcoind, starts the stack
+./scripts/wait-for-sync.sh     # tails logs until node is in sync
+```
+
+Don't have the repo on GitHub? Just copy the folder up directly:
+
+```bash
+# from your laptop, in the project root:
+scp -r infra/txc-stack root@your-vps:/opt/txc-stack
+ssh root@your-vps
+cd /opt/txc-stack
+# ...then continue from `cp .env.example .env` above
 ```
 
 Initial block download is ~30–60 min on a decent box (TXC chain is small).
