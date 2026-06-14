@@ -75,9 +75,9 @@ function Dashboard() {
             <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
               <Zap className="size-4 text-primary" /> Mempool · projected blocks
             </h2>
-            <span className="text-[11px] text-muted-foreground font-mono">
-              {feed.mempool ? `${formatNumber(feed.mempool.count)} txs waiting` : ""}
-            </span>
+            <Link to="/mempool" className="text-[11px] text-muted-foreground hover:text-primary font-medium">
+              {feed.mempool ? `${formatNumber(feed.mempool.count)} txs waiting →` : "view mempool →"}
+            </Link>
           </div>
           <MempoolBlocksViz blocks={feed.mempoolBlocks} />
         </div>
