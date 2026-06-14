@@ -62,7 +62,7 @@ export function MempoolBlocksViz({ blocks }: Props) {
                 {i === 0 ? "next block" : `in ~${(i + 1) * 3} min`}
               </div>
             </div>
-          </div>
+          </Link>
         );
       })}
     </div>
