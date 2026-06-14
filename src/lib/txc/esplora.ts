@@ -146,13 +146,19 @@ async function get<T>(path: string): Promise<T> {
   return text as unknown as T;
 }
 
-// Address lookups require electrs, which only the legacy explorer host runs.
-// Route those calls there (CORS allows *). Path is the bare Esplora path,
-// e.g. "/address/Txxx" or "/address/Txxx/txs".
-const TXC_ADDR_API_BASE = "https://mempool.texitcoin.org/api";
+// Address lookups require an Esplora-compatible index (electrs / mempool-electrs).
+// These live at the bare /address/... paths on the same host once the backend
+// is configured with MEMPOOL_BACKEND=electrum (or =esplora).
 async function getAddr<T>(path: string): Promise<T> {
-  const res = await fetch(`${TXC_ADDR_API_BASE}${path}`);
-  if (!res.ok) throw new Error(`Addr API ${path} → ${res.status}`);
+  const res = await fetch(`${TXC_API_BASE}${path}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      res.status === 405 && body.includes("bitcoind as backend")
+        ? "Backend has no address index (MEMPOOL_BACKEND=none). Enable electrs to serve address lookups."
+        : `Addr API ${path} → ${res.status}`,
+    );
+  }
   return res.json() as Promise<T>;
 }
 
