@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as MiningRouteImport } from './routes/mining'
+import { Route as MempoolRouteImport } from './routes/mempool'
 import { Route as GraphsRouteImport } from './routes/graphs'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as BlocksRouteImport } from './routes/blocks'
@@ -46,6 +47,11 @@ import { Route as ApiPublicV1AddressAddrTxsRouteImport } from './routes/api/publ
 const MiningRoute = MiningRouteImport.update({
   id: '/mining',
   path: '/mining',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MempoolRoute = MempoolRouteImport.update({
+  id: '/mempool',
+  path: '/mempool',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GraphsRoute = GraphsRouteImport.update({
@@ -229,6 +235,7 @@ export interface FileRoutesByFullPath {
   '/blocks': typeof BlocksRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
+  '/mempool': typeof MempoolRoute
   '/mining': typeof MiningRoute
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/blocks': typeof BlocksRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
+  '/mempool': typeof MempoolRoute
   '/mining': typeof MiningRoute
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
@@ -300,6 +308,7 @@ export interface FileRoutesById {
   '/blocks': typeof BlocksRoute
   '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
+  '/mempool': typeof MempoolRoute
   '/mining': typeof MiningRoute
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/docs'
     | '/graphs'
+    | '/mempool'
     | '/mining'
     | '/address/$addr'
     | '/block/$hash'
@@ -372,6 +382,7 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/docs'
     | '/graphs'
+    | '/mempool'
     | '/mining'
     | '/address/$addr'
     | '/block/$hash'
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/blocks'
     | '/docs'
     | '/graphs'
+    | '/mempool'
     | '/mining'
     | '/address/$addr'
     | '/block/$hash'
@@ -443,6 +455,7 @@ export interface RootRouteChildren {
   BlocksRoute: typeof BlocksRoute
   DocsRoute: typeof DocsRoute
   GraphsRoute: typeof GraphsRoute
+  MempoolRoute: typeof MempoolRoute
   MiningRoute: typeof MiningRoute
   AddressAddrRoute: typeof AddressAddrRoute
   BlockHashRoute: typeof BlockHashRoute
@@ -473,6 +486,13 @@ declare module '@tanstack/react-router' {
       path: '/mining'
       fullPath: '/mining'
       preLoaderRoute: typeof MiningRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mempool': {
+      id: '/mempool'
+      path: '/mempool'
+      fullPath: '/mempool'
+      preLoaderRoute: typeof MempoolRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/graphs': {
@@ -751,6 +771,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlocksRoute: BlocksRoute,
   DocsRoute: DocsRoute,
   GraphsRoute: GraphsRoute,
+  MempoolRoute: MempoolRoute,
   MiningRoute: MiningRoute,
   AddressAddrRoute: AddressAddrRoute,
   BlockHashRoute: BlockHashRoute,

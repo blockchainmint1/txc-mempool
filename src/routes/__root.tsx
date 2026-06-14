@@ -119,6 +119,7 @@ function Header() {
         <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
           {[
             { to: "/", label: "Dashboard" },
+            { to: "/mempool", label: "Mempool" },
             { to: "/blocks", label: "Blocks" },
             { to: "/mining", label: "Mining" },
             { to: "/graphs", label: "Graphs" },
@@ -160,6 +161,7 @@ function Footer() {
           <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Explore</div>
           <ul className="space-y-1">
             <li><Link to="/" className="hover:text-primary">Dashboard</Link></li>
+            <li><Link to="/mempool" className="hover:text-primary">Mempool</Link></li>
             <li><Link to="/blocks" className="hover:text-primary">Blocks</Link></li>
             <li><Link to="/mining" className="hover:text-primary">Mining</Link></li>
             <li><Link to="/graphs" className="hover:text-primary">Graphs</Link></li>
