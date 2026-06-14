@@ -151,6 +151,58 @@ function Dashboard() {
           </p>
         </div>
       </section>
+
+      <RecentTransactions />
     </div>
+  );
+}
+
+function RecentTransactions() {
+  const recent = useQuery({
+    queryKey: ["mempool", "recent", "home"],
+    queryFn: () => esplora.mempoolRecent(),
+    refetchInterval: 10_000,
+    retry: 0,
+  });
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-display text-sm uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+          <Clock className="size-4 text-accent" /> Recent transactions
+        </h2>
+        <Link to="/mempool" className="text-[11px] text-muted-foreground hover:text-primary font-medium">
+          view all in mempool →
+        </Link>
+      </div>
+      {recent.isLoading ? (
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      ) : !recent.data?.length ? (
+        <div className="surface-2 border border-border rounded-md p-6 text-sm text-muted-foreground text-center">
+          No recent unconfirmed transactions.
+        </div>
+      ) : (
+        <div className="grid gap-1.5">
+          {recent.data.slice(0, 12).map((t) => {
+            const feeRate = t.vsize > 0 ? t.fee / t.vsize : 0;
+            return (
+              <Link
+                key={t.txid}
+                to="/tx/$txid"
+                params={{ txid: t.txid }}
+                className="surface-2 border border-border rounded-md px-3 py-2 hover:border-primary/60 transition-colors flex items-center justify-between gap-3 text-xs"
+              >
+                <span className="font-mono truncate">{shortHash(t.txid, 14, 14)}</span>
+                <div className="flex items-center gap-4 flex-shrink-0 font-mono">
+                  <span className="text-muted-foreground hidden sm:inline">{t.vsize} vB</span>
+                  <span className="text-accent">{feeRate.toFixed(2)} sat/vB</span>
+                  <span className="text-foreground">{satsToTxc(t.value)} TXC</span>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
