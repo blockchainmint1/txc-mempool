@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as MiningRouteImport } from './routes/mining'
 import { Route as GraphsRouteImport } from './routes/graphs'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as BlocksRouteImport } from './routes/blocks'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as SplatRouteImport } from './routes/$'
@@ -50,6 +51,11 @@ const MiningRoute = MiningRouteImport.update({
 const GraphsRoute = GraphsRouteImport.update({
   id: '/graphs',
   path: '/graphs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlocksRoute = BlocksRouteImport.update({
@@ -221,6 +227,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
   '/blocks': typeof BlocksRoute
+  '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
   '/mining': typeof MiningRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -255,6 +262,7 @@ export interface FileRoutesByTo {
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
   '/blocks': typeof BlocksRoute
+  '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
   '/mining': typeof MiningRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -290,6 +298,7 @@ export interface FileRoutesById {
   '/$': typeof SplatRoute
   '/about': typeof AboutRoute
   '/blocks': typeof BlocksRoute
+  '/docs': typeof DocsRoute
   '/graphs': typeof GraphsRoute
   '/mining': typeof MiningRoute
   '/address/$addr': typeof AddressAddrRoute
@@ -326,6 +335,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/blocks'
+    | '/docs'
     | '/graphs'
     | '/mining'
     | '/address/$addr'
@@ -360,6 +370,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/blocks'
+    | '/docs'
     | '/graphs'
     | '/mining'
     | '/address/$addr'
@@ -394,6 +405,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/blocks'
+    | '/docs'
     | '/graphs'
     | '/mining'
     | '/address/$addr'
@@ -429,6 +441,7 @@ export interface RootRouteChildren {
   SplatRoute: typeof SplatRoute
   AboutRoute: typeof AboutRoute
   BlocksRoute: typeof BlocksRoute
+  DocsRoute: typeof DocsRoute
   GraphsRoute: typeof GraphsRoute
   MiningRoute: typeof MiningRoute
   AddressAddrRoute: typeof AddressAddrRoute
@@ -467,6 +480,13 @@ declare module '@tanstack/react-router' {
       path: '/graphs'
       fullPath: '/graphs'
       preLoaderRoute: typeof GraphsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blocks': {
@@ -729,6 +749,7 @@ const rootRouteChildren: RootRouteChildren = {
   SplatRoute: SplatRoute,
   AboutRoute: AboutRoute,
   BlocksRoute: BlocksRoute,
+  DocsRoute: DocsRoute,
   GraphsRoute: GraphsRoute,
   MiningRoute: MiningRoute,
   AddressAddrRoute: AddressAddrRoute,
