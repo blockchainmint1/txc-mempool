@@ -30,9 +30,39 @@ export const Route = createFileRoute("/address/$addr")({
 function AddressPage() {
   const { addr } = Route.useParams();
   const info = useQuery({ queryKey: ["mempool", "addr", addr], queryFn: () => esplora.address(addr) });
-  const txs = useQuery({ queryKey: ["mempool", "addr-txs", addr], queryFn: () => esplora.addressTxs(addr) });
   const utxos = useQuery({ queryKey: ["mempool", "addr-utxos", addr], queryFn: () => esplora.addressUtxos(addr) });
   const tip = useQuery({ queryKey: ["mempool", "tip-height"], queryFn: () => esplora.tipHeight(), refetchInterval: 30_000 });
+
+  // Paginated tx history — esplora returns 25 confirmed + all mempool per page,
+  // keyed by the last-seen txid. Some addresses (e.g. coinbase) have thousands.
+  const [pages, setPages] = useState<import("@/lib/txc/esplora").Tx[][]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [exhausted, setExhausted] = useState(false);
+
+  const firstPage = useQuery({
+    queryKey: ["mempool", "addr-txs", addr],
+    queryFn: async () => {
+      const list = await esplora.addressTxs(addr);
+      setPages([list]);
+      setExhausted(list.length < 25);
+      return list;
+    },
+  });
+
+  const allTxs = useMemo(() => pages.flat(), [pages]);
+
+  async function loadMore() {
+    const last = allTxs[allTxs.length - 1];
+    if (!last || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const next = await esplora.addressTxs(addr, last.txid);
+      setPages((p) => [...p, next]);
+      if (next.length < 25) setExhausted(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
@@ -45,9 +75,8 @@ function AddressPage() {
   }, [addr]);
 
   const filtered = useMemo(() => {
-    const list = txs.data ?? [];
-    if (filter === "all") return list;
-    return list.filter((tx) => {
+    if (filter === "all") return allTxs;
+    return allTxs.filter((tx) => {
       const inFromMe = tx.vin.some((v) => v.prevout?.scriptpubkey_address === addr);
       const outToMe = tx.vout.some((v) => v.scriptpubkey_address === addr);
       switch (filter) {
@@ -59,7 +88,7 @@ function AddressPage() {
         default: return true;
       }
     });
-  }, [txs.data, filter, addr]);
+  }, [allTxs, filter, addr]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
