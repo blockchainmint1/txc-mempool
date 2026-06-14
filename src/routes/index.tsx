@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMempoolFeed } from "@/lib/txc/ws";
 import { esplora } from "@/lib/txc/esplora";
@@ -7,8 +7,8 @@ import { ConfirmedBlocksStrip } from "@/components/explorer/ConfirmedBlocksStrip
 import { FeeGauge } from "@/components/explorer/FeeGauge";
 import { StatTile } from "@/components/explorer/StatTile";
 import { SearchBar } from "@/components/explorer/SearchBar";
-import { formatBytes, formatNumber, timeAgo } from "@/lib/txc/format";
-import { Activity, Zap } from "lucide-react";
+import { formatBytes, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
+import { Activity, Clock, Zap } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
