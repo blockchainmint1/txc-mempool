@@ -160,6 +160,7 @@ function Footer() {
           <div className="font-display text-xs uppercase mb-2 text-muted-foreground">Explore</div>
           <ul className="space-y-1">
             <li><Link to="/" className="hover:text-primary">Dashboard</Link></li>
+            <li><Link to="/mempool" className="hover:text-primary">Mempool</Link></li>
             <li><Link to="/blocks" className="hover:text-primary">Blocks</Link></li>
             <li><Link to="/mining" className="hover:text-primary">Mining</Link></li>
             <li><Link to="/graphs" className="hover:text-primary">Graphs</Link></li>
