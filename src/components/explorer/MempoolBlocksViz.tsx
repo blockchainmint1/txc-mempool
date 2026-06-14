@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { feeBucket } from "@/lib/txc/format";
 import type { MempoolBlock } from "@/lib/txc/esplora";
