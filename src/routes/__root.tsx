@@ -166,6 +166,7 @@ function Footer() {
             <li><Link to="/blocks" className="hover:text-primary">Blocks</Link></li>
             <li><Link to="/mining" className="hover:text-primary">Mining</Link></li>
             <li><Link to="/graphs" className="hover:text-primary">Graphs</Link></li>
+            <li><Link to="/richlist" className="hover:text-primary">Richlist</Link></li>
           </ul>
         </div>
         <div>
