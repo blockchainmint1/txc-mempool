@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RichlistRouteImport } from './routes/richlist'
 import { Route as MiningRouteImport } from './routes/mining'
 import { Route as MempoolRouteImport } from './routes/mempool'
 import { Route as GraphsRouteImport } from './routes/graphs'
@@ -45,6 +46,11 @@ import { Route as ApiPublicV1BlockHashTxidsRouteImport } from './routes/api/publ
 import { Route as ApiPublicV1AddressAddrUtxoRouteImport } from './routes/api/public/v1/address.$addr.utxo'
 import { Route as ApiPublicV1AddressAddrTxsRouteImport } from './routes/api/public/v1/address.$addr.txs'
 
+const RichlistRoute = RichlistRouteImport.update({
+  id: '/richlist',
+  path: '/richlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MiningRoute = MiningRouteImport.update({
   id: '/mining',
   path: '/mining',
@@ -243,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/graphs': typeof GraphsRoute
   '/mempool': typeof MempoolRoute
   '/mining': typeof MiningRoute
+  '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
@@ -280,6 +287,7 @@ export interface FileRoutesByTo {
   '/graphs': typeof GraphsRoute
   '/mempool': typeof MempoolRoute
   '/mining': typeof MiningRoute
+  '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
@@ -318,6 +326,7 @@ export interface FileRoutesById {
   '/graphs': typeof GraphsRoute
   '/mempool': typeof MempoolRoute
   '/mining': typeof MiningRoute
+  '/richlist': typeof RichlistRoute
   '/address/$addr': typeof AddressAddrRoute
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
@@ -357,6 +366,7 @@ export interface FileRouteTypes {
     | '/graphs'
     | '/mempool'
     | '/mining'
+    | '/richlist'
     | '/address/$addr'
     | '/block/$hash'
     | '/tx/$txid'
@@ -394,6 +404,7 @@ export interface FileRouteTypes {
     | '/graphs'
     | '/mempool'
     | '/mining'
+    | '/richlist'
     | '/address/$addr'
     | '/block/$hash'
     | '/tx/$txid'
@@ -431,6 +442,7 @@ export interface FileRouteTypes {
     | '/graphs'
     | '/mempool'
     | '/mining'
+    | '/richlist'
     | '/address/$addr'
     | '/block/$hash'
     | '/tx/$txid'
@@ -469,6 +481,7 @@ export interface RootRouteChildren {
   GraphsRoute: typeof GraphsRoute
   MempoolRoute: typeof MempoolRoute
   MiningRoute: typeof MiningRoute
+  RichlistRoute: typeof RichlistRoute
   AddressAddrRoute: typeof AddressAddrRoute
   BlockHashRoute: typeof BlockHashRoute
   TxTxidRoute: typeof TxTxidRoute
@@ -494,6 +507,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/richlist': {
+      id: '/richlist'
+      path: '/richlist'
+      fullPath: '/richlist'
+      preLoaderRoute: typeof RichlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/mining': {
       id: '/mining'
       path: '/mining'
@@ -793,6 +813,7 @@ const rootRouteChildren: RootRouteChildren = {
   GraphsRoute: GraphsRoute,
   MempoolRoute: MempoolRoute,
   MiningRoute: MiningRoute,
+  RichlistRoute: RichlistRoute,
   AddressAddrRoute: AddressAddrRoute,
   BlockHashRoute: BlockHashRoute,
   TxTxidRoute: TxTxidRoute,
