@@ -46,6 +46,8 @@ export const REST_GROUPS: EndpointGroup[] = [
       { method: "GET", path: "/api/v1/address/:addr", summary: "Address summary: chain_stats + mempool_stats." },
       { method: "GET", path: "/api/v1/address/:addr/utxo", summary: "Unspent outputs at this address." },
       { method: "GET", path: "/api/v1/address/:addr/txs", summary: "Most recent transactions involving this address." },
+      { method: "GET", path: "/api/public/v1/richlist?limit=100", summary: "Top N addresses by confirmed unspent balance (max 500). Balances in satoshis. Edge-cached 60s.",
+        example: `{\n  "computed_at": 1781494149,\n  "indexed_tip": 312529,\n  "limit": 5,\n  "total_entries": 5,\n  "entries": [\n    { "address": "txc1q...", "balance": 300765299989780, "utxo_count": 1 }\n  ]\n}` },
     ],
   },
   {
