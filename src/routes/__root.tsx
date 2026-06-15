@@ -123,6 +123,7 @@ function Header() {
             { to: "/blocks", label: "Blocks" },
             { to: "/mining", label: "Mining" },
             { to: "/graphs", label: "Graphs" },
+            { to: "/richlist", label: "Richlist" },
             { to: "/docs", label: "API" },
             { to: "/about", label: "About" },
           ].map((l) => (
