@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -9,6 +10,15 @@ interface HashrateResponse {
   hashrates: { timestamp: number; avgHashrate: number }[];
   difficulty: { timestamp: number; difficulty: number; height: number }[];
 }
+
+type Window = "1d" | "1w" | "1m" | "3m" | "1y";
+const WINDOWS: { value: Window; label: string }[] = [
+  { value: "1d", label: "Day" },
+  { value: "1w", label: "Week" },
+  { value: "1m", label: "Month" },
+  { value: "3m", label: "3 Months" },
+  { value: "1y", label: "Year" },
+];
 
 function formatHashrate(h: number): string {
   if (h >= 1e18) return `${(h / 1e18).toFixed(2)} EH/s`;
@@ -28,10 +38,11 @@ function formatDifficulty(d: number): string {
 }
 
 export function NetworkDifficultyChart() {
+  const [win, setWin] = useState<Window>("1m");
   const q = useQuery({
-    queryKey: ["network-hashrate", "1m"],
+    queryKey: ["network-hashrate", win],
     queryFn: async (): Promise<HashrateResponse> => {
-      const res = await fetch("/api/public/v1/mining/hashrate?window=1m");
+      const res = await fetch(`/api/public/v1/mining/hashrate?window=${win}`);
       if (!res.ok) throw new Error(`hashrate ${res.status}`);
       return res.json();
     },
@@ -40,11 +51,18 @@ export function NetworkDifficultyChart() {
     retry: 0,
   });
 
+  const xTickFormat = (t: number) => {
+    const d = new Date(t * 1000);
+    if (win === "1d") return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    if (win === "1y") return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
   return (
     <div className="rounded-md surface-2 border border-border p-4">
       <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
         <h3 className="font-display text-sm uppercase tracking-widest text-muted-foreground">
-          Network hashrate · 30d
+          Network hashrate
         </h3>
         <div className="flex items-baseline gap-4 font-mono text-xs">
           {q.data && (
@@ -60,6 +78,22 @@ export function NetworkDifficultyChart() {
             </>
           )}
         </div>
+      </div>
+
+      <div className="mb-3 inline-flex rounded-sm border border-border bg-surface-1 p-0.5 font-mono text-[11px]">
+        {WINDOWS.map((w) => (
+          <button
+            key={w.value}
+            onClick={() => setWin(w.value)}
+            className={`px-2.5 py-1 rounded-sm uppercase tracking-wider transition-colors ${
+              win === w.value
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {w.label}
+          </button>
+        ))}
       </div>
 
       {q.isLoading && (
@@ -85,7 +119,7 @@ export function NetworkDifficultyChart() {
               <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
               <XAxis
                 dataKey="timestamp"
-                tickFormatter={(t) => new Date(t * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                tickFormatter={xTickFormat}
                 stroke="var(--color-muted-foreground)"
                 fontSize={10}
               />
@@ -123,3 +157,4 @@ export function NetworkDifficultyChart() {
     </div>
   );
 }
+
