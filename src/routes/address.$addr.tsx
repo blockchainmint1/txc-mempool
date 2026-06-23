@@ -162,7 +162,7 @@ function AddressPage() {
 
       {/* BALANCE HISTORY */}
       {allTxs.length > 0 && (
-        <BalanceHistoryChart txs={allTxs} address={addr} />
+        <BalanceHistoryChart txs={allTxs} address={addr} currentSats={bal?.total ?? 0} />
       )}
 
       {/* UTXO BUBBLES + HEATMAP */}
