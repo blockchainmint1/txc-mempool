@@ -155,8 +155,6 @@ function Dashboard() {
         </div>
       </section>
 
-      <NetworkDifficultyChart />
-
       <RecentTransactions />
     </div>
   );
