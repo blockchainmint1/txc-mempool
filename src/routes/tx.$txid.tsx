@@ -4,7 +4,7 @@ import { esplora, txFeeRate } from "@/lib/txc/esplora";
 import { StatTile } from "@/components/explorer/StatTile";
 import { TxFlow } from "@/components/explorer/TxFlow";
 import { formatBytes, formatDateTime, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
-import { legacyExplorerTxUrl } from "@/lib/txc/network";
+
 
 export const Route = createFileRoute("/tx/$txid")({
   head: ({ params }) => ({
@@ -65,14 +65,6 @@ function TxPage() {
               block #{formatNumber(t.status.block_height ?? 0)}
             </Link>
           )}
-          <a
-            href={legacyExplorerTxUrl(txid)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-muted-foreground hover:text-foreground ml-auto"
-          >
-            view on legacy explorer ↗
-          </a>
         </div>
       </div>
 
