@@ -94,7 +94,7 @@ export function BalanceHistoryChart({
             </defs>
             <XAxis
               dataKey="t"
-              tickFormatter={(v) => new Date(v * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              tickFormatter={tickFmt}
               tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
               stroke="var(--color-border)"
               minTickGap={50}
