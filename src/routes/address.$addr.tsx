@@ -5,6 +5,7 @@ import { Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { addressBalanceSats, esplora } from "@/lib/txc/esplora";
 import { StatTile } from "@/components/explorer/StatTile";
+import { UsdValue } from "@/components/explorer/UsdValue";
 import { TxListRow } from "@/components/explorer/TxListRow";
 import { formatNumber, satsToTxc, timeAgo } from "@/lib/txc/format";
 import { BalanceHistoryChart } from "@/components/address/BalanceHistoryChart";
@@ -150,8 +151,8 @@ function AddressPage() {
 
           {info.data && bal && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-              <StatTile label="Balance" value={`${satsToTxc(bal.total)} TXC`} hint={bal.unconfirmed !== 0 ? `${satsToTxc(bal.unconfirmed)} pending` : undefined} />
-              <StatTile label="Total received" value={`${satsToTxc(info.data.chain_stats.funded_txo_sum)} TXC`} />
+              <StatTile label="Balance" value={`${satsToTxc(bal.total)} TXC`} hint={<><UsdValue sats={bal.total} />{bal.unconfirmed !== 0 ? <> · {satsToTxc(bal.unconfirmed)} pending</> : null}</>} />
+              <StatTile label="Total received" value={`${satsToTxc(info.data.chain_stats.funded_txo_sum)} TXC`} hint={<UsdValue sats={info.data.chain_stats.funded_txo_sum} />} />
               <StatTile label="Transactions" value={formatNumber(info.data.chain_stats.tx_count + info.data.mempool_stats.tx_count)} />
               <StatTile label="UTXOs" value={utxos.data ? formatNumber(utxos.data.length) : "—"} hint={allTxs.length ? `last seen ${timeAgo(allTxs[0]?.status.block_time)}` : undefined} />
             </div>

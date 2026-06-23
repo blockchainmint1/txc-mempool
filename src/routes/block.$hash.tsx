@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { esplora } from "@/lib/txc/esplora";
 import { StatTile } from "@/components/explorer/StatTile";
+import { UsdValue } from "@/components/explorer/UsdValue";
 import { TxListRow } from "@/components/explorer/TxListRow";
 import { formatBytes, formatDateTime, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
 
@@ -46,7 +47,7 @@ function BlockPage() {
             <StatTile
               label="Pool"
               value={b.extras?.pool?.name ?? "Unknown"}
-              hint={b.extras?.reward != null ? `${satsToTxc(b.extras.reward)} TXC reward` : undefined}
+              hint={b.extras?.reward != null ? <>{satsToTxc(b.extras.reward)} TXC · <UsdValue sats={b.extras.reward} /></> : undefined}
             />
             <StatTile
               label="Median fee"
