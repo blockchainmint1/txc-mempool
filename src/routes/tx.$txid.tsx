@@ -70,13 +70,17 @@ function TxPage() {
       </div>
 
       <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatTile label="Fee" value={`${satsToTxc(t.fee)} TXC`} hint={`${fr.toFixed(2)} sat/vB`} />
+        <StatTile
+          label="Fee"
+          value={<>{satsToTxc(t.fee)} TXC</>}
+          hint={<><span>{fr.toFixed(2)} sat/vB</span> · <UsdValue sats={t.fee} hideZero /></>}
+        />
         <StatTile label="Size" value={formatBytes(t.size)} hint={`vsize ${(t.weight / 4).toFixed(0)}`} />
         <StatTile label="Weight" value={`${formatNumber(t.weight)} wu`} />
         <StatTile
           label="Total out"
-          value={`${satsToTxc(totalOut)} TXC`}
-          hint={t.vin[0]?.is_coinbase ? "coinbase issuance" : `in ${satsToTxc(totalIn)}`}
+          value={<>{satsToTxc(totalOut)} TXC</>}
+          hint={<><UsdValue sats={totalOut} /> · {t.vin[0]?.is_coinbase ? "coinbase issuance" : `in ${satsToTxc(totalIn)}`}</>}
         />
         <StatTile
           label="Time"
