@@ -46,6 +46,7 @@ import { Route as ApiV1BlocksTipHashRouteImport } from './routes/api/v1/blocks.t
 import { Route as ApiV1BlockHashTxidsRouteImport } from './routes/api/v1/block.$hash.txids'
 import { Route as ApiV1AddressAddrUtxoRouteImport } from './routes/api/v1/address.$addr.utxo'
 import { Route as ApiV1AddressAddrTxsRouteImport } from './routes/api/v1/address.$addr.txs'
+import { Route as ApiV1AddressAddrBalanceHistoryRouteImport } from './routes/api/v1/address.$addr.balance-history'
 
 const RichlistRoute = RichlistRouteImport.update({
   id: '/richlist',
@@ -233,6 +234,12 @@ const ApiV1AddressAddrTxsRoute = ApiV1AddressAddrTxsRouteImport.update({
   path: '/txs',
   getParentRoute: () => ApiV1AddressAddrRoute,
 } as any)
+const ApiV1AddressAddrBalanceHistoryRoute =
+  ApiV1AddressAddrBalanceHistoryRouteImport.update({
+    id: '/balance-history',
+    path: '/balance-history',
+    getParentRoute: () => ApiV1AddressAddrRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -262,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/api/v1/tx/$txid': typeof ApiV1TxTxidRouteWithChildren
   '/api/v1/blocks/': typeof ApiV1BlocksIndexRoute
   '/api/v1/mempool/': typeof ApiV1MempoolIndexRoute
+  '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
   '/api/v1/block/$hash/txids': typeof ApiV1BlockHashTxidsRoute
@@ -301,6 +309,7 @@ export interface FileRoutesByTo {
   '/api/v1/tx/$txid': typeof ApiV1TxTxidRouteWithChildren
   '/api/v1/blocks': typeof ApiV1BlocksIndexRoute
   '/api/v1/mempool': typeof ApiV1MempoolIndexRoute
+  '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
   '/api/v1/block/$hash/txids': typeof ApiV1BlockHashTxidsRoute
@@ -341,6 +350,7 @@ export interface FileRoutesById {
   '/api/v1/tx/$txid': typeof ApiV1TxTxidRouteWithChildren
   '/api/v1/blocks/': typeof ApiV1BlocksIndexRoute
   '/api/v1/mempool/': typeof ApiV1MempoolIndexRoute
+  '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
   '/api/v1/block/$hash/txids': typeof ApiV1BlockHashTxidsRoute
@@ -382,6 +392,7 @@ export interface FileRouteTypes {
     | '/api/v1/tx/$txid'
     | '/api/v1/blocks/'
     | '/api/v1/mempool/'
+    | '/api/v1/address/$addr/balance-history'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
     | '/api/v1/block/$hash/txids'
@@ -421,6 +432,7 @@ export interface FileRouteTypes {
     | '/api/v1/tx/$txid'
     | '/api/v1/blocks'
     | '/api/v1/mempool'
+    | '/api/v1/address/$addr/balance-history'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
     | '/api/v1/block/$hash/txids'
@@ -460,6 +472,7 @@ export interface FileRouteTypes {
     | '/api/v1/tx/$txid'
     | '/api/v1/blocks/'
     | '/api/v1/mempool/'
+    | '/api/v1/address/$addr/balance-history'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
     | '/api/v1/block/$hash/txids'
@@ -767,15 +780,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AddressAddrTxsRouteImport
       parentRoute: typeof ApiV1AddressAddrRoute
     }
+    '/api/v1/address/$addr/balance-history': {
+      id: '/api/v1/address/$addr/balance-history'
+      path: '/balance-history'
+      fullPath: '/api/v1/address/$addr/balance-history'
+      preLoaderRoute: typeof ApiV1AddressAddrBalanceHistoryRouteImport
+      parentRoute: typeof ApiV1AddressAddrRoute
+    }
   }
 }
 
 interface ApiV1AddressAddrRouteChildren {
+  ApiV1AddressAddrBalanceHistoryRoute: typeof ApiV1AddressAddrBalanceHistoryRoute
   ApiV1AddressAddrTxsRoute: typeof ApiV1AddressAddrTxsRoute
   ApiV1AddressAddrUtxoRoute: typeof ApiV1AddressAddrUtxoRoute
 }
 
 const ApiV1AddressAddrRouteChildren: ApiV1AddressAddrRouteChildren = {
+  ApiV1AddressAddrBalanceHistoryRoute: ApiV1AddressAddrBalanceHistoryRoute,
   ApiV1AddressAddrTxsRoute: ApiV1AddressAddrTxsRoute,
   ApiV1AddressAddrUtxoRoute: ApiV1AddressAddrUtxoRoute,
 }
