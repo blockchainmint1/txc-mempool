@@ -47,7 +47,7 @@ function BlockPage() {
             <StatTile
               label="Pool"
               value={b.extras?.pool?.name ?? "Unknown"}
-              hint={b.extras?.reward != null ? `${satsToTxc(b.extras.reward)} TXC reward` : undefined}
+              hint={b.extras?.reward != null ? <>{satsToTxc(b.extras.reward)} TXC · <UsdValue sats={b.extras.reward} /></> : undefined}
             />
             <StatTile
               label="Median fee"
