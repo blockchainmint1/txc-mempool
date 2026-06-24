@@ -68,5 +68,5 @@ echo
 echo "All set. Watch logs with:"
 echo "  docker compose logs -f indexer mempool-api nginx"
 echo "Test once the node is synced (~30-60 min on a fresh box):"
-echo "  curl https://${DOMAIN}/api/blocks/tip/height"
+echo "  curl https://${DOMAIN}/api/v1/blocks/tip/height"
 echo "  curl https://${DOMAIN}/api/address/_status"
