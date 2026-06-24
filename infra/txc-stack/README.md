@@ -98,7 +98,7 @@ scripts/backup.sh          # dumps chainstate + mempool DB to /var/backups
   (historical stats), and the indexer SQLite at
   `./data/indexer/indexer.sqlite`. `scripts/backup.sh` handles the DB.
 - **Monitoring**: nginx access log + a simple uptime check on
-  `/api/blocks/tip/height` returning a number, and `/api/address/_status`
+  `/api/v1/blocks/tip/height` returning a number, and `/api/address/_status`
   returning `{ok:true}`, covers 95% of what you need.
 
 ## Why nginx and not Caddy?

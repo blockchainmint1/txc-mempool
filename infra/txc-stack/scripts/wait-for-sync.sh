@@ -33,12 +33,12 @@ done
 echo "==> indexer ready"
 
 echo "==> Waiting for mempool backend..."
-until docker compose exec -T mempool-api wget -qO- http://localhost:8999/api/blocks/tip/height >/dev/null 2>&1; do
+until docker compose exec -T mempool-api wget -qO- http://localhost:8999/api/v1/blocks/tip/height >/dev/null 2>&1; do
   sleep 10
 done
 echo "==> mempool backend ready"
 
 echo
 echo "All green. Test from your laptop:"
-echo "  curl https://${DOMAIN}/api/blocks/tip/height"
+echo "  curl https://${DOMAIN}/api/v1/blocks/tip/height"
 echo "  curl https://${DOMAIN}/api/address/_status"
