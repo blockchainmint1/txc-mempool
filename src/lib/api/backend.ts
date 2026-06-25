@@ -21,7 +21,8 @@ export async function proxy(
   try {
     res = await fetch(url, { headers: { Accept: "application/json, text/plain, */*" } });
   } catch (e) {
-    return errorResponse(`Backend fetch failed: ${(e as Error).message}`, 502);
+    console.error("Backend fetch failed", { path, error: e });
+    return errorResponse("Upstream unavailable", 502);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");

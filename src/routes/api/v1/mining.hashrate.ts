@@ -82,7 +82,8 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
         try {
           tip = await fetchTipHeight();
         } catch (e) {
-          return errorResponse(`tip lookup failed: ${(e as Error).message}`, 502);
+          console.error("tip lookup failed", e);
+          return errorResponse("Upstream unavailable", 502);
         }
 
         const heights = sampleHeights(tip, windowParam);

@@ -22,7 +22,8 @@ export const Route = createFileRoute("/api/v1/omni/tx/$txid")({
           if (!decoded) return jsonResponse({ omni: null, message: "No Omni payload detected" });
           return jsonResponse({ omni: decoded });
         } catch (e) {
-          return errorResponse((e as Error).message, 502);
+          console.error("omni tx lookup failed", { txid: params.txid, error: e });
+          return errorResponse("Upstream unavailable", 502);
         }
       },
     },

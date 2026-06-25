@@ -34,7 +34,8 @@ export const Route = createFileRoute("/api/v1/supply")({
             note: "Approximation from Bitcoin-style halving schedule (50 TXC start, 210000-block halvings).",
           });
         } catch (e) {
-          return errorResponse((e as Error).message, 502);
+          console.error("supply lookup failed", e);
+          return errorResponse("Upstream unavailable", 502);
         }
       },
     },
