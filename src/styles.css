@@ -219,14 +219,14 @@
     backface-visibility: hidden;
     box-sizing: border-box;
   }
-  /* Front face base — color is supplied inline via --c (rgb) */
+  /* Front face base — color is supplied inline via --c (full CSS color, e.g. var(--fee-3)) */
   .cube-front {
     background:
       radial-gradient(120% 80% at 20% 0%, rgba(255,255,255,0.22), transparent 55%),
       linear-gradient(165deg,
-        color-mix(in oklab, rgb(var(--c)) 100%, white 8%) 0%,
-        rgb(var(--c)) 40%,
-        color-mix(in oklab, rgb(var(--c)) 100%, black 28%) 100%);
+        color-mix(in oklab, var(--c), white 8%) 0%,
+        var(--c) 40%,
+        color-mix(in oklab, var(--c), black 28%) 100%);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.10),
       inset 0 -18px 28px rgba(0,0,0,0.32),
@@ -243,21 +243,22 @@
   }
   .cube-top {
     background: linear-gradient(135deg,
-      color-mix(in oklab, rgb(var(--c)) 100%, white 38%) 0%,
-      color-mix(in oklab, rgb(var(--c)) 100%, white 14%) 60%,
-      color-mix(in oklab, rgb(var(--c)) 100%, black 4%) 100%);
+      color-mix(in oklab, var(--c), white 38%) 0%,
+      color-mix(in oklab, var(--c), white 14%) 60%,
+      color-mix(in oklab, var(--c), black 4%) 100%);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.18),
       inset 0 6px 14px rgba(255,255,255,0.12);
   }
   .cube-right {
     background: linear-gradient(90deg,
-      color-mix(in oklab, rgb(var(--c)) 100%, black 12%) 0%,
-      color-mix(in oklab, rgb(var(--c)) 100%, black 38%) 100%);
+      color-mix(in oklab, var(--c), black 12%) 0%,
+      color-mix(in oklab, var(--c), black 38%) 100%);
     box-shadow:
       inset 0 0 0 1px rgba(0,0,0,0.35),
       inset 6px 0 14px rgba(0,0,0,0.25);
   }
+
   .cube-shadow {
     position: absolute;
     left: 8%;
