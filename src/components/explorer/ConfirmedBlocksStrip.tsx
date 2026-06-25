@@ -1,15 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { cn } from "@/lib/utils";
 import { feeBucket } from "@/lib/txc/format";
 import type { BlockSummary } from "@/lib/txc/esplora";
+import { Block3D } from "./Block3D";
 
-const FEE_CLASS: Record<number, string> = {
-  1: "bg-fee-1",
-  2: "bg-fee-2",
-  3: "bg-fee-3",
-  4: "bg-fee-4",
-  5: "bg-fee-5",
-  6: "bg-fee-6",
+const FEE_VAR: Record<number, string> = {
+  1: "var(--color-fee-1)",
+  2: "var(--color-fee-2)",
+  3: "var(--color-fee-3)",
+  4: "var(--color-fee-4)",
+  5: "var(--color-fee-5)",
+  6: "var(--color-fee-6)",
 };
 
 interface Props {
@@ -17,59 +17,73 @@ interface Props {
   emptyLabel?: string;
 }
 
-/** Confirmed blocks ribbon, mempool.space-style. */
+/**
+ * Confirmed (mined) blocks — a chain of real 3D cubes receding to the right
+ * (further into the past). Newest block is closest; older blocks recede.
+ */
 export function ConfirmedBlocksStrip({ blocks, emptyLabel = "Waiting for blocks…" }: Props) {
   if (!blocks.length) {
     return (
-      <div className="rounded-md surface-2 border border-border px-4 py-6 text-sm text-muted-foreground text-center">
+      <div className="rounded-md surface-2 border border-border px-4 py-8 text-sm text-muted-foreground text-center">
         {emptyLabel}
       </div>
     );
   }
+  const items = blocks.slice(0, 6);
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
-      {blocks.slice(0, 8).map((b) => {
-        const median = b.extras?.medianFee ?? 0;
-        const cls = FEE_CLASS[feeBucket(median || 1)];
-        const fees = b.extras?.totalFees;
-        const reward = b.extras?.reward;
-        return (
-          <Link
-            key={b.id}
-            to="/block/$hash"
-            params={{ hash: b.id }}
-            className="group flex-shrink-0 w-36 rounded-md overflow-hidden border border-border shadow-card hover:shadow-glow-red transition-shadow animate-block-pop"
-          >
-            <div
-              className={cn(
-                "h-28 flex flex-col items-center justify-center text-white p-2 relative",
-                cls,
-              )}
+    <div className="relative scene-3d pt-8 pb-12 px-2 overflow-hidden rounded-lg surface-2 border border-border">
+      <div className="chain-stars" />
+      <div className="chain-floor" />
+      <div className="chain-row chain-row-confirmed relative flex items-end gap-3 justify-end">
+        {items.map((b, i) => {
+          const median = b.extras?.medianFee ?? 0;
+          const color = FEE_VAR[feeBucket(median || 1)];
+          const scale = 1 - i * 0.07;
+          const fees = b.extras?.totalFees;
+          const reward = b.extras?.reward;
+          return (
+            <Link
+              key={b.id}
+              to="/block/$hash"
+              params={{ hash: b.id }}
+              className="group flex flex-col items-center animate-block-pop"
+              style={{
+                animationDelay: `${i * 80}ms`,
+                transformStyle: "preserve-3d",
+              }}
             >
-              <div className="font-display text-2xl font-bold tracking-tight">
-                {b.height.toLocaleString()}
-              </div>
-              <div className="text-[10px] uppercase opacity-80 mt-1">
-                ~{median ? median.toFixed(1) : "—"} sat/vB
-              </div>
-              {fees != null && (
-                <div className="text-[10px] opacity-80">
-                  {(fees / 1e8).toFixed(4)} TXC fees
+              <Block3D
+                color={color}
+                size={140}
+                depth={44}
+                scale={scale}
+                emptyPct={0}
+                rotateY={32}
+                rotateX={-18}
+              >
+                <div className="font-display text-xl font-bold leading-none drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)]">
+                  {b.height.toLocaleString()}
                 </div>
-              )}
-            </div>
-            <div className="bg-card px-2 py-1.5 text-[11px] text-muted-foreground font-mono flex flex-col gap-0.5">
-              <div className="flex justify-between">
-                <span>{b.tx_count} tx</span>
-                <span>{Math.round(b.size / 1024)} kB</span>
-              </div>
-              <div className="truncate">
+                <div className="text-[9px] uppercase tracking-widest opacity-80 mt-1">height</div>
+                <div className="text-[10px] font-semibold mt-2 opacity-95">
+                  ~{median ? median.toFixed(1) : "—"} sat/vB
+                </div>
+                {fees != null && (
+                  <div className="text-[10px] mt-2 opacity-90">
+                    {(fees / 1e8).toFixed(4)} TXC
+                  </div>
+                )}
+                <div className="text-[9px] mt-1 opacity-75">
+                  {b.tx_count} tx · {Math.round(b.size / 1024)} kB
+                </div>
+              </Block3D>
+              <div className="mt-4 text-[10px] font-mono text-muted-foreground group-hover:text-primary transition-colors truncate max-w-[140px]">
                 {b.extras?.pool?.name ?? (reward ? `${(reward / 1e8).toFixed(2)} TXC` : "—")}
               </div>
-            </div>
-          </Link>
-        );
-      })}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
