@@ -3,7 +3,19 @@
 
 import Fastify from "fastify";
 import { db, getTipHeight } from "./db.js";
-import { getRawTx, rpc, RpcError, txcToSats, voutAddress, type RpcTx } from "./rpc.js";
+import {
+  getBlockCount,
+  getBlockHash,
+  getBlockVerbose,
+  getRawMempool,
+  getRawTx,
+  rpc,
+  RpcError,
+  txcToSats,
+  voutAddress,
+  type RpcBlock,
+  type RpcTx,
+} from "./rpc.js";
 
 const PORT = Number(process.env.HTTP_PORT ?? 3001);
 
