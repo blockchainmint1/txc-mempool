@@ -15,7 +15,7 @@ export const Route = createFileRoute("/docs")({
   component: DocsPage,
 });
 
-const ORIGIN = "https://mempool2.texitcoin.org";
+const ORIGIN = "https://api.mempool.texitcoin.org";
 
 function DocsPage() {
   const [tab, setTab] = useState<"rest" | "ws">("rest");
@@ -30,7 +30,10 @@ function DocsPage() {
           <a href="https://mempool.space/docs/api" target="_blank" rel="noreferrer" className="text-accent hover:underline">
             mempool.space
           </a>{" "}
-          patterns — point your client at <span className="font-mono text-foreground">{ORIGIN}</span> and you're done.
+          patterns. The block explorer you see at{" "}
+          <a href="https://mempool.texitcoin.org" className="text-accent hover:underline">mempool.texitcoin.org</a>{" "}
+          is a frontend that reads from this API. Point your own client or wallet at{" "}
+          <span className="font-mono text-foreground">{ORIGIN}</span> and you're done.
           Rate-limited per IP at the edge; please cache aggressively. Need higher limits or want to mirror the data?{" "}
           <a href="mailto:hello@texitcoin.org" className="text-accent hover:underline">Get in touch</a>.
         </p>
