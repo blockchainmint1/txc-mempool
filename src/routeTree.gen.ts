@@ -36,6 +36,7 @@ import { Route as ApiTxTxidRouteImport } from './routes/api/tx.$txid'
 import { Route as ApiMempoolTxidsRouteImport } from './routes/api/mempool.txids'
 import { Route as ApiBlocksStartHeightRouteImport } from './routes/api/blocks.$startHeight'
 import { Route as ApiBlockHeightHeightRouteImport } from './routes/api/block-height.$height'
+import { Route as ApiAddressAddrRouteImport } from './routes/api/address.$addr'
 import { Route as ApiV1TxIndexRouteImport } from './routes/api/v1/tx.index'
 import { Route as ApiV1MempoolIndexRouteImport } from './routes/api/v1/mempool.index'
 import { Route as ApiV1BlocksIndexRouteImport } from './routes/api/v1/blocks.index'
@@ -54,6 +55,9 @@ import { Route as ApiTxTxidOutspendsRouteImport } from './routes/api/tx.$txid.ou
 import { Route as ApiTxTxidHexRouteImport } from './routes/api/tx.$txid.hex'
 import { Route as ApiBlocksTipHeightRouteImport } from './routes/api/blocks.tip.height'
 import { Route as ApiBlocksTipHashRouteImport } from './routes/api/blocks.tip.hash'
+import { Route as ApiAddressAddrUtxoRouteImport } from './routes/api/address.$addr.utxo'
+import { Route as ApiAddressAddrTxsRouteImport } from './routes/api/address.$addr.txs'
+import { Route as ApiAddressAddrBalanceHistoryRouteImport } from './routes/api/address.$addr.balance-history'
 import { Route as ApiV1TxTxidStatusRouteImport } from './routes/api/v1/tx.$txid.status'
 import { Route as ApiV1TxTxidOutspendsRouteImport } from './routes/api/v1/tx.$txid.outspends'
 import { Route as ApiV1TxTxidHexRouteImport } from './routes/api/v1/tx.$txid.hex'
@@ -202,6 +206,11 @@ const ApiBlockHeightHeightRoute = ApiBlockHeightHeightRouteImport.update({
   path: '/api/block-height/$height',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAddressAddrRoute = ApiAddressAddrRouteImport.update({
+  id: '/api/address/$addr',
+  path: '/api/address/$addr',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1TxIndexRoute = ApiV1TxIndexRouteImport.update({
   id: '/api/v1/tx/',
   path: '/api/v1/tx/',
@@ -292,6 +301,22 @@ const ApiBlocksTipHashRoute = ApiBlocksTipHashRouteImport.update({
   path: '/api/blocks/tip/hash',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAddressAddrUtxoRoute = ApiAddressAddrUtxoRouteImport.update({
+  id: '/utxo',
+  path: '/utxo',
+  getParentRoute: () => ApiAddressAddrRoute,
+} as any)
+const ApiAddressAddrTxsRoute = ApiAddressAddrTxsRouteImport.update({
+  id: '/txs',
+  path: '/txs',
+  getParentRoute: () => ApiAddressAddrRoute,
+} as any)
+const ApiAddressAddrBalanceHistoryRoute =
+  ApiAddressAddrBalanceHistoryRouteImport.update({
+    id: '/balance-history',
+    path: '/balance-history',
+    getParentRoute: () => ApiAddressAddrRoute,
+  } as any)
 const ApiV1TxTxidStatusRoute = ApiV1TxTxidStatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -365,6 +390,7 @@ export interface FileRoutesByFullPath {
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/mempool/': typeof MempoolIndexRoute
+  '/api/address/$addr': typeof ApiAddressAddrRouteWithChildren
   '/api/block-height/$height': typeof ApiBlockHeightHeightRoute
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
@@ -377,6 +403,9 @@ export interface FileRoutesByFullPath {
   '/mempool/block/$index': typeof MempoolBlockIndexRoute
   '/api/blocks/': typeof ApiBlocksIndexRoute
   '/api/mempool/': typeof ApiMempoolIndexRoute
+  '/api/address/$addr/balance-history': typeof ApiAddressAddrBalanceHistoryRoute
+  '/api/address/$addr/txs': typeof ApiAddressAddrTxsRoute
+  '/api/address/$addr/utxo': typeof ApiAddressAddrUtxoRoute
   '/api/blocks/tip/hash': typeof ApiBlocksTipHashRoute
   '/api/blocks/tip/height': typeof ApiBlocksTipHeightRoute
   '/api/tx/$txid/hex': typeof ApiTxTxidHexRoute
@@ -422,6 +451,7 @@ export interface FileRoutesByTo {
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/mempool': typeof MempoolIndexRoute
+  '/api/address/$addr': typeof ApiAddressAddrRouteWithChildren
   '/api/block-height/$height': typeof ApiBlockHeightHeightRoute
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
@@ -434,6 +464,9 @@ export interface FileRoutesByTo {
   '/mempool/block/$index': typeof MempoolBlockIndexRoute
   '/api/blocks': typeof ApiBlocksIndexRoute
   '/api/mempool': typeof ApiMempoolIndexRoute
+  '/api/address/$addr/balance-history': typeof ApiAddressAddrBalanceHistoryRoute
+  '/api/address/$addr/txs': typeof ApiAddressAddrTxsRoute
+  '/api/address/$addr/utxo': typeof ApiAddressAddrUtxoRoute
   '/api/blocks/tip/hash': typeof ApiBlocksTipHashRoute
   '/api/blocks/tip/height': typeof ApiBlocksTipHeightRoute
   '/api/tx/$txid/hex': typeof ApiTxTxidHexRoute
@@ -481,6 +514,7 @@ export interface FileRoutesById {
   '/block/$hash': typeof BlockHashRoute
   '/tx/$txid': typeof TxTxidRoute
   '/mempool/': typeof MempoolIndexRoute
+  '/api/address/$addr': typeof ApiAddressAddrRouteWithChildren
   '/api/block-height/$height': typeof ApiBlockHeightHeightRoute
   '/api/blocks/$startHeight': typeof ApiBlocksStartHeightRoute
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
@@ -493,6 +527,9 @@ export interface FileRoutesById {
   '/mempool/block/$index': typeof MempoolBlockIndexRoute
   '/api/blocks/': typeof ApiBlocksIndexRoute
   '/api/mempool/': typeof ApiMempoolIndexRoute
+  '/api/address/$addr/balance-history': typeof ApiAddressAddrBalanceHistoryRoute
+  '/api/address/$addr/txs': typeof ApiAddressAddrTxsRoute
+  '/api/address/$addr/utxo': typeof ApiAddressAddrUtxoRoute
   '/api/blocks/tip/hash': typeof ApiBlocksTipHashRoute
   '/api/blocks/tip/height': typeof ApiBlocksTipHeightRoute
   '/api/tx/$txid/hex': typeof ApiTxTxidHexRoute
@@ -541,6 +578,7 @@ export interface FileRouteTypes {
     | '/block/$hash'
     | '/tx/$txid'
     | '/mempool/'
+    | '/api/address/$addr'
     | '/api/block-height/$height'
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
@@ -553,6 +591,9 @@ export interface FileRouteTypes {
     | '/mempool/block/$index'
     | '/api/blocks/'
     | '/api/mempool/'
+    | '/api/address/$addr/balance-history'
+    | '/api/address/$addr/txs'
+    | '/api/address/$addr/utxo'
     | '/api/blocks/tip/hash'
     | '/api/blocks/tip/height'
     | '/api/tx/$txid/hex'
@@ -598,6 +639,7 @@ export interface FileRouteTypes {
     | '/block/$hash'
     | '/tx/$txid'
     | '/mempool'
+    | '/api/address/$addr'
     | '/api/block-height/$height'
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
@@ -610,6 +652,9 @@ export interface FileRouteTypes {
     | '/mempool/block/$index'
     | '/api/blocks'
     | '/api/mempool'
+    | '/api/address/$addr/balance-history'
+    | '/api/address/$addr/txs'
+    | '/api/address/$addr/utxo'
     | '/api/blocks/tip/hash'
     | '/api/blocks/tip/height'
     | '/api/tx/$txid/hex'
@@ -656,6 +701,7 @@ export interface FileRouteTypes {
     | '/block/$hash'
     | '/tx/$txid'
     | '/mempool/'
+    | '/api/address/$addr'
     | '/api/block-height/$height'
     | '/api/blocks/$startHeight'
     | '/api/mempool/txids'
@@ -668,6 +714,9 @@ export interface FileRouteTypes {
     | '/mempool/block/$index'
     | '/api/blocks/'
     | '/api/mempool/'
+    | '/api/address/$addr/balance-history'
+    | '/api/address/$addr/txs'
+    | '/api/address/$addr/utxo'
     | '/api/blocks/tip/hash'
     | '/api/blocks/tip/height'
     | '/api/tx/$txid/hex'
@@ -714,6 +763,7 @@ export interface RootRouteChildren {
   ApiTxRoute: typeof ApiTxRouteWithChildren
   BlockHashRoute: typeof BlockHashRoute
   TxTxidRoute: typeof TxTxidRoute
+  ApiAddressAddrRoute: typeof ApiAddressAddrRouteWithChildren
   ApiBlockHeightHeightRoute: typeof ApiBlockHeightHeightRoute
   ApiBlocksStartHeightRoute: typeof ApiBlocksStartHeightRoute
   ApiMempoolTxidsRoute: typeof ApiMempoolTxidsRoute
@@ -936,6 +986,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBlockHeightHeightRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/address/$addr': {
+      id: '/api/address/$addr'
+      path: '/api/address/$addr'
+      fullPath: '/api/address/$addr'
+      preLoaderRoute: typeof ApiAddressAddrRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/tx/': {
       id: '/api/v1/tx/'
       path: '/api/v1/tx'
@@ -1062,6 +1119,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBlocksTipHashRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/address/$addr/utxo': {
+      id: '/api/address/$addr/utxo'
+      path: '/utxo'
+      fullPath: '/api/address/$addr/utxo'
+      preLoaderRoute: typeof ApiAddressAddrUtxoRouteImport
+      parentRoute: typeof ApiAddressAddrRoute
+    }
+    '/api/address/$addr/txs': {
+      id: '/api/address/$addr/txs'
+      path: '/txs'
+      fullPath: '/api/address/$addr/txs'
+      preLoaderRoute: typeof ApiAddressAddrTxsRouteImport
+      parentRoute: typeof ApiAddressAddrRoute
+    }
+    '/api/address/$addr/balance-history': {
+      id: '/api/address/$addr/balance-history'
+      path: '/balance-history'
+      fullPath: '/api/address/$addr/balance-history'
+      preLoaderRoute: typeof ApiAddressAddrBalanceHistoryRouteImport
+      parentRoute: typeof ApiAddressAddrRoute
+    }
     '/api/v1/tx/$txid/status': {
       id: '/api/v1/tx/$txid/status'
       path: '/status'
@@ -1181,6 +1259,22 @@ const ApiTxRouteChildren: ApiTxRouteChildren = {
 
 const ApiTxRouteWithChildren = ApiTxRoute._addFileChildren(ApiTxRouteChildren)
 
+interface ApiAddressAddrRouteChildren {
+  ApiAddressAddrBalanceHistoryRoute: typeof ApiAddressAddrBalanceHistoryRoute
+  ApiAddressAddrTxsRoute: typeof ApiAddressAddrTxsRoute
+  ApiAddressAddrUtxoRoute: typeof ApiAddressAddrUtxoRoute
+}
+
+const ApiAddressAddrRouteChildren: ApiAddressAddrRouteChildren = {
+  ApiAddressAddrBalanceHistoryRoute: ApiAddressAddrBalanceHistoryRoute,
+  ApiAddressAddrTxsRoute: ApiAddressAddrTxsRoute,
+  ApiAddressAddrUtxoRoute: ApiAddressAddrUtxoRoute,
+}
+
+const ApiAddressAddrRouteWithChildren = ApiAddressAddrRoute._addFileChildren(
+  ApiAddressAddrRouteChildren,
+)
+
 interface ApiV1AddressAddrRouteChildren {
   ApiV1AddressAddrBalanceHistoryRoute: typeof ApiV1AddressAddrBalanceHistoryRoute
   ApiV1AddressAddrTxsRoute: typeof ApiV1AddressAddrTxsRoute
@@ -1239,6 +1333,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiTxRoute: ApiTxRouteWithChildren,
   BlockHashRoute: BlockHashRoute,
   TxTxidRoute: TxTxidRoute,
+  ApiAddressAddrRoute: ApiAddressAddrRouteWithChildren,
   ApiBlockHeightHeightRoute: ApiBlockHeightHeightRoute,
   ApiBlocksStartHeightRoute: ApiBlocksStartHeightRoute,
   ApiMempoolTxidsRoute: ApiMempoolTxidsRoute,
