@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { feeBucket } from "@/lib/txc/format";
+import { feeBucket, timeAgo } from "@/lib/txc/format";
 import type { BlockSummary } from "@/lib/txc/esplora";
+
 
 const FEE_VAR: Record<number, string> = {
   1: "var(--color-fee-1)",
@@ -36,7 +37,6 @@ export function ConfirmedBlocksStrip({ blocks, emptyLabel = "Waiting for blocksâ
         const median = b.extras?.medianFee ?? 0;
         const color = FEE_VAR[feeBucket(median || 1)];
         const fees = b.extras?.totalFees;
-        const reward = b.extras?.reward;
         return (
           <Link
             key={b.id}
@@ -69,9 +69,13 @@ export function ConfirmedBlocksStrip({ blocks, emptyLabel = "Waiting for blocksâ
                 </div>
               </div>
             </div>
-            <div className="mt-2 text-[10px] font-mono text-muted-foreground group-hover:text-primary transition-colors truncate max-w-[140px]">
-              {b.extras?.pool?.name ?? (reward ? `${(reward / 1e8).toFixed(2)} TXC` : "â€”")}
+            <div
+              className="mt-2 text-[10px] font-mono text-muted-foreground group-hover:text-primary transition-colors truncate max-w-[140px]"
+              title={new Date(b.timestamp * 1000).toLocaleString()}
+            >
+              {timeAgo(b.timestamp)}
             </div>
+
           </Link>
         );
       })}
