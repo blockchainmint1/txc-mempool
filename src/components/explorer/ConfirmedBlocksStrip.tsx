@@ -28,7 +28,8 @@ export function ConfirmedBlocksStrip({ blocks, emptyLabel = "Waiting for blocksâ
       </div>
     );
   }
-  const items = blocks.slice(0, 6);
+  // Newest first: sort by height desc so a new block pushes the strip to the right.
+  const items = [...blocks].sort((a, b) => b.height - a.height).slice(0, 6);
   return (
     <div className="flex items-end gap-3 overflow-x-auto pb-2">
       {items.map((b) => {
