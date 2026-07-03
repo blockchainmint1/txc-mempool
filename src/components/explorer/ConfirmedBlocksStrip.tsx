@@ -37,7 +37,6 @@ export function ConfirmedBlocksStrip({ blocks, emptyLabel = "Waiting for blocksâ
         const median = b.extras?.medianFee ?? 0;
         const color = FEE_VAR[feeBucket(median || 1)];
         const fees = b.extras?.totalFees;
-        const reward = b.extras?.reward;
         return (
           <Link
             key={b.id}
