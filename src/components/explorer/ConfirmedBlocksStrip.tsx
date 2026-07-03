@@ -70,9 +70,13 @@ export function ConfirmedBlocksStrip({ blocks, emptyLabel = "Waiting for blocksâ
                 </div>
               </div>
             </div>
-            <div className="mt-2 text-[10px] font-mono text-muted-foreground group-hover:text-primary transition-colors truncate max-w-[140px]">
-              {b.extras?.pool?.name ?? (reward ? `${(reward / 1e8).toFixed(2)} TXC` : "â€”")}
+            <div
+              className="mt-2 text-[10px] font-mono text-muted-foreground group-hover:text-primary transition-colors truncate max-w-[140px]"
+              title={new Date(b.timestamp * 1000).toLocaleString()}
+            >
+              {timeAgo(b.timestamp)}
             </div>
+
           </Link>
         );
       })}
