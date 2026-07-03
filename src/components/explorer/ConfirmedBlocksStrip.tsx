@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { feeBucket } from "@/lib/txc/format";
+import { feeBucket, timeAgo } from "@/lib/txc/format";
 import type { BlockSummary } from "@/lib/txc/esplora";
+
 
 const FEE_VAR: Record<number, string> = {
   1: "var(--color-fee-1)",
