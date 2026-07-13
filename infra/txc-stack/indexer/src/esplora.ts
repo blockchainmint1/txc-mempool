@@ -315,6 +315,51 @@ app.get<{ Querystring: { limit?: string } }>("/address/_richlist", async ({ quer
   };
 });
 
+// GET /address/_supply — real circulating TXC supply computed from the live
+// UTXO set (SUM(balance) across the materialized balances table). Sub-ms
+// thanks to the small table + partial index. Cached briefly to avoid
+// repeated scans under load.
+const SUPPLY_TTL_MS = Number(process.env.SUPPLY_TTL_MS ?? 30_000);
+let supplyCache: {
+  at: number;
+  computed_at: number;
+  indexed_tip: number;
+  circulating_sats: number;
+  address_count: number;
+  utxo_count: number;
+} | null = null;
+app.get("/address/_supply", async (_req, reply) => {
+  const now = Date.now();
+  if (!supplyCache || now - supplyCache.at > SUPPLY_TTL_MS) {
+    const row = db
+      .prepare(
+        `SELECT COALESCE(SUM(balance), 0) AS sats,
+                COUNT(*)                 AS addrs,
+                COALESCE(SUM(utxo_count), 0) AS utxos
+         FROM balances
+         WHERE balance > 0`,
+      )
+      .get() as { sats: number; addrs: number; utxos: number };
+    supplyCache = {
+      at: now,
+      computed_at: Math.floor(now / 1000),
+      indexed_tip: getTipHeight(),
+      circulating_sats: row.sats,
+      address_count: row.addrs,
+      utxo_count: row.utxos,
+    };
+  }
+  reply.header("cache-control", `public, max-age=${Math.floor(SUPPLY_TTL_MS / 1000)}`);
+  return {
+    computed_at: supplyCache.computed_at,
+    indexed_tip: supplyCache.indexed_tip,
+    circulating_sats: supplyCache.circulating_sats,
+    circulating: supplyCache.circulating_sats / 1e8,
+    address_count: supplyCache.address_count,
+    utxo_count: supplyCache.utxo_count,
+  };
+});
+
 // GET /address/:addr
 app.get<{ Params: { addr: string } }>("/address/:addr", async ({ params }) => {
   const { addr } = params;
