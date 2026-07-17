@@ -28,10 +28,25 @@ export async function rpc<T = unknown>(method: string, params: unknown[] = []): 
       body: JSON.stringify({ jsonrpc: "1.0", id, method, params }),
       signal: ctrl.signal,
     });
+
+    // Bitcoin Core sometimes rejects with a plain-text body instead of JSON —
+    // most commonly "Work queue depth exceeded" when rpcworkqueue is full, or
+    // "Service Unavailable" during warmup. Peek at the body as text first and
+    // only JSON-parse when it looks like JSON, so the indexer can treat these
+    // as retryable RPC errors instead of crashing with "Unexpected token W".
+    const raw = await res.text();
+    const trimmed = raw.trimStart();
+    const looksJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+
+    if (!looksJson) {
+      const snippet = raw.slice(0, 120).replace(/\s+/g, " ").trim() || res.statusText;
+      throw new RpcError(res.status || 502, `Non-JSON RPC response (${res.status}): ${snippet}`);
+    }
+
     if (!res.ok && res.status !== 500) {
       throw new RpcError(res.status, `HTTP ${res.status} from ${method}`);
     }
-    const body = (await res.json()) as { result: T; error: { code: number; message: string } | null };
+    const body = JSON.parse(raw) as { result: T; error: { code: number; message: string } | null };
     if (body.error) throw new RpcError(body.error.code, body.error.message);
     return body.result;
   } finally {
