@@ -43,8 +43,8 @@ export function useMempoolFeed(): MempoolFeedSnapshot {
     let cancelled = false;
     let wsAlive = false;
 
-    async function pullAll(): Promise<Partial<MempoolFeedSnapshot>> {
-      const [tip, blocks, mempool, mempoolBlocks, fees] = await Promise.allSettled([
+    async function pullAll() {
+      return Promise.allSettled([
         esplora.tipHeight(),
         // v1 includes extras.medianFee / totalFees / pool — needed by the
         // confirmed-blocks strip. Fall back to the plain endpoint if 404.
@@ -53,21 +53,25 @@ export function useMempoolFeed(): MempoolFeedSnapshot {
         esplora.mempoolBlocks(),
         esplora.feesRecommended(),
       ]);
-      return {
-        tipHeight: tip.status === "fulfilled" ? tip.value : null,
-        blocks: blocks.status === "fulfilled" ? blocks.value : [],
-        mempool: mempool.status === "fulfilled" ? mempool.value : null,
-        mempoolBlocks:
-          mempoolBlocks.status === "fulfilled" ? mempoolBlocks.value : [],
-        fees: fees.status === "fulfilled" ? fees.value : null,
-        lastTick: Date.now(),
-      };
     }
 
     async function poll() {
-      const next = await pullAll();
+      const [tip, blocks, mempool, mempoolBlocks, fees] = await pullAll();
       if (cancelled) return;
-      setSnap((prev) => ({ ...prev, ...next, status: wsAlive ? "live" : "polling" }));
+      setSnap((prev) => ({
+        ...prev,
+        // Only overwrite a field when its fetch succeeded — otherwise keep
+        // the last-known value so a single flaky upstream call doesn't blank
+        // the mempool UI ("blip then empty" bug on intermittent 502s).
+        tipHeight: tip.status === "fulfilled" ? tip.value : prev.tipHeight,
+        blocks: blocks.status === "fulfilled" ? blocks.value : prev.blocks,
+        mempool: mempool.status === "fulfilled" ? mempool.value : prev.mempool,
+        mempoolBlocks:
+          mempoolBlocks.status === "fulfilled" ? mempoolBlocks.value : prev.mempoolBlocks,
+        fees: fees.status === "fulfilled" ? fees.value : prev.fees,
+        lastTick: Date.now(),
+        status: wsAlive ? "live" : "polling",
+      }));
       // Bump any tx/address queries that may have flipped on new block.
       qc.invalidateQueries({ queryKey: ["mempool"], exact: false });
     }
