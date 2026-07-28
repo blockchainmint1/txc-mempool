@@ -94,12 +94,20 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
           return errorResponse("no block data returned from backend", 502);
         }
 
-        // Current = average over the most recent populated chunk.
-        const newestChunk = populated.reduce((a, b) =>
-          Math.max(...a.map((x) => x.height)) > Math.max(...b.map((x) => x.height)) ? a : b,
+        // Current = median of the 3 most-recent chunk estimates. Chunks are
+        // non-contiguous so we can't pool their blocks (the gaps would inflate
+        // the time span); a median across them kills luck-driven outliers that
+        // made a single 15-block chunk swing 2-3x.
+        const byHeight = [...populated].sort(
+          (a, b) => Math.max(...b.map((x) => x.height)) - Math.max(...a.map((x) => x.height)),
         );
-        const currentHashrate = hashrateFromBlocks(newestChunk);
-        const currentDifficulty = newestChunk[0]?.difficulty ?? 0;
+        const recent = byHeight.slice(0, 3).map(hashrateFromBlocks).filter((h) => h > 0).sort((a, b) => a - b);
+        const currentHashrate = recent.length
+          ? recent.length % 2
+            ? recent[recent.length >> 1]
+            : (recent[recent.length / 2 - 1] + recent[recent.length / 2]) / 2
+          : 0;
+        const currentDifficulty = byHeight[0]?.[0]?.difficulty ?? 0;
 
         const body = {
           window: windowParam,

@@ -152,7 +152,7 @@ export function NetworkDifficultyChart() {
         </div>
       )}
       <p className="mt-2 text-[10px] font-mono text-muted-foreground/70">
-        computed locally · difficulty × 2³² ÷ avg block time · cached 5 min
+        computed locally · Σ work ÷ elapsed time, median-smoothed · cached 5 min
       </p>
     </div>
   );

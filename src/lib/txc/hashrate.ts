@@ -27,22 +27,60 @@ export interface DifficultySample {
 // 2^32 expressed as a number — exact, fits in a double.
 const TWO_32 = 4294967296;
 
-/** Hashrate (H/s) implied by one block's difficulty + the time it took. */
+/**
+ * Hashrate (H/s) from a set of blocks, using total work / total time.
+ *
+ *   hashrate = Σ(difficulty_i · 2³²) / (t_last − t_first)
+ *
+ * This is the honest estimator: it weights each block by the work it
+ * actually represents instead of multiplying an average difficulty by an
+ * average block time (which double-counts variance and is what made the
+ * chart jump around). Uses the *spacing* denominator (n−1 intervals) so a
+ * short chunk isn't biased low.
+ */
 export function hashrateFromBlocks(blocks: BlockHeaderLite[]): number {
   if (blocks.length < 2) return 0;
   // Blocks may arrive newest-first or oldest-first; sort oldest-first.
   const sorted = [...blocks].sort((a, b) => a.timestamp - b.timestamp);
   const span = sorted[sorted.length - 1].timestamp - sorted[0].timestamp;
   if (span <= 0) return 0;
-  const avgBlockTime = span / (sorted.length - 1);
-  const avgDifficulty =
-    sorted.reduce((s, b) => s + b.difficulty, 0) / sorted.length;
-  return (avgDifficulty * TWO_32) / avgBlockTime;
+  // Work of the n−1 intervals: skip the oldest block, whose solve time
+  // falls outside the measured span.
+  const work = sorted.slice(1).reduce((s, b) => s + b.difficulty * TWO_32, 0);
+  return work / span;
+}
+
+/** Median of a numeric list (returns 0 for empty). */
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/**
+ * Centered rolling median then mean over the sample series.
+ *
+ * Individual chunks are only ~15 blocks, so Poisson variance in solve times
+ * swings a single point by 2-3×. A median first kills the outlier spikes
+ * (a lucky 5-second block), then a light mean pass makes the line readable
+ * without hiding real trends.
+ */
+export function smoothSeries(samples: HashrateSample[], radius = 2): HashrateSample[] {
+  if (samples.length <= 2 || radius < 1) return samples;
+  const vals = samples.map((s) => s.avgHashrate);
+  const med = vals.map((_, i) =>
+    median(vals.slice(Math.max(0, i - radius), Math.min(vals.length, i + radius + 1))),
+  );
+  return samples.map((s, i) => {
+    const win = med.slice(Math.max(0, i - 1), Math.min(med.length, i + 2));
+    return { timestamp: s.timestamp, avgHashrate: win.reduce((a, b) => a + b, 0) / win.length };
+  });
 }
 
 /** Build a sparse hashrate time series from sampled block chunks. */
 export function seriesFromChunks(chunks: BlockHeaderLite[][]): HashrateSample[] {
-  return chunks
+  const raw = chunks
     .map((chunk) => {
       if (chunk.length === 0) return null;
       const ts = chunk.reduce((s, b) => s + b.timestamp, 0) / chunk.length;
@@ -50,6 +88,7 @@ export function seriesFromChunks(chunks: BlockHeaderLite[][]): HashrateSample[] 
     })
     .filter((x): x is HashrateSample => x != null && x.avgHashrate > 0)
     .sort((a, b) => a.timestamp - b.timestamp);
+  return smoothSeries(raw);
 }
 
 /** One difficulty point per chunk (newest block per chunk). */
