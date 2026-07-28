@@ -1,14 +1,19 @@
-// Network hashrate / difficulty time series, computed locally from block
-// headers. No upstream `/mining/hashrate/*` dependency — we walk
-// `/api/v1/blocks/{height}` ourselves and apply the standard formula:
+// Network hashrate / difficulty time series.
+//
+// `currentHashrate` is read live from the TEXITcoin pool
+// (pool.texitcoin.org/api/currencies), which tracks difficulty and target
+// spacing continuously and is therefore far steadier than a chain-derived
+// estimate. If the pool is unreachable we fall back to computing it from
+// block headers ourselves:
 //
 //     hashrate = difficulty * 2^32 / avg_block_time
 //
-// Anyone consuming this can do the same math from `/api/v1/blocks` if
-// they don't want to call us. See src/lib/txc/hashrate.ts.
+// The historical series is always chain-derived — the pool only publishes a
+// single "now" value. See src/lib/txc/hashrate.ts.
 
 import { createFileRoute } from "@tanstack/react-router";
 import { CORS_HEADERS, errorResponse, optionsHandler } from "@/lib/api/cors";
+import { fetchPoolNetworkStats } from "@/lib/txc/pool.server";
 import {
   difficultyFromChunks,
   hashrateFromBlocks,
@@ -17,6 +22,7 @@ import {
   type BlockHeaderLite,
   type Window,
 } from "@/lib/txc/hashrate";
+
 
 const BACKEND = "https://api.mempool.texitcoin.org/api";
 const VALID_WINDOWS: Window[] = ["1d", "1w", "1m", "3m", "1y"];
