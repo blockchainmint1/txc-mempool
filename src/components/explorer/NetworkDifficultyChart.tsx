@@ -7,6 +7,7 @@ import {
 interface HashrateResponse {
   currentHashrate: number;
   currentDifficulty: number;
+  source?: "pool" | "chain";
   hashrates: { timestamp: number; avgHashrate: number }[];
   difficulty: { timestamp: number; difficulty: number; height: number }[];
 }
