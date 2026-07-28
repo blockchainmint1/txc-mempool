@@ -76,8 +76,8 @@ export const REST_GROUPS: EndpointGroup[] = [
       { method: "GET", path: "/api/v1/mining/pools/1m", summary: "Pool block share over the last 30 days." },
       { method: "GET", path: "/api/v1/difficulty-adjustment", summary: "Progress and ETA to the next retarget." },
       { method: "GET", path: "/api/v1/mining/hashrate?window=1w",
-        summary: "Network hashrate + difficulty time series, computed locally from block headers. window = 1d | 1w | 1m | 3m | 1y. Same formula mempool uses internally: difficulty × 2³² ÷ avg_block_time. Edge-cached.",
-        example: `{\n  "window": "1w",\n  "tipHeight": 316395,\n  "computedAt": 1782205885,\n  "currentHashrate": 19834217856.42,\n  "currentDifficulty": 276448.15,\n  "hashrates": [\n    { "timestamp": 1781601085, "avgHashrate": 18910223104.1 }\n  ],\n  "difficulty": [\n    { "timestamp": 1781601085, "difficulty": 268914.7, "height": 313035 }\n  ],\n  "formula": "hashrate = difficulty * 2^32 / avg_block_time_sec",\n  "sampleSizePerPoint": 15\n}` },
+        summary: "Network hashrate + difficulty time series. window = 1d | 1w | 1m | 3m | 1y. `currentHashrate` is read live from the TEXITcoin pool (steadiest figure available); if the pool is unreachable it falls back to the chain-derived estimate and `source` becomes \"chain\". `computedHashrate` is always the chain-derived value (difficulty × 2³² ÷ avg_block_time) so you can compare. History is always chain-derived. Edge-cached.",
+        example: `{\n  "window": "1w",\n  "tipHeight": 332173,\n  "computedAt": 1782205885,\n  "currentHashrate": 18916792441409.37,\n  "currentDifficulty": 770771.568,\n  "source": "pool",\n  "computedHashrate": 20563960911777.14,\n  "poolWorkers": 0,\n  "blocks24h": 438,\n  "blockReward": 254,\n  "hashrates": [\n    { "timestamp": 1781601085, "avgHashrate": 18910223104.1 }\n  ],\n  "difficulty": [\n    { "timestamp": 1781601085, "difficulty": 268914.7, "height": 313035 }\n  ],\n  "formula": "hashrate = difficulty * 2^32 / avg_block_time_sec",\n  "sampleSizePerPoint": 15\n}` },
     ],
   },
   {

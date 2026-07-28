@@ -7,6 +7,7 @@ import {
 interface HashrateResponse {
   currentHashrate: number;
   currentDifficulty: number;
+  source?: "pool" | "chain";
   hashrates: { timestamp: number; avgHashrate: number }[];
   difficulty: { timestamp: number; difficulty: number; height: number }[];
 }
@@ -67,9 +68,18 @@ export function NetworkDifficultyChart() {
         <div className="flex items-baseline gap-4 font-mono text-xs">
           {q.data && (
             <>
-              <span>
+              <span
+                title={
+                  q.data.source === "pool"
+                    ? "Live figure from the TEXITcoin pool"
+                    : "Estimated from block headers (pool unavailable)"
+                }
+              >
                 <span className="text-muted-foreground">now </span>
                 <span className="text-foreground">{formatHashrate(q.data.currentHashrate)}</span>
+                {q.data.source === "chain" && (
+                  <span className="text-muted-foreground"> (est)</span>
+                )}
               </span>
               <span>
                 <span className="text-muted-foreground">diff </span>
