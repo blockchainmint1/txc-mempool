@@ -13,7 +13,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { CORS_HEADERS, errorResponse, optionsHandler } from "@/lib/api/cors";
-import { fetchPoolNetworkStats } from "@/lib/txc/pool.server";
+import { fetchPoolNetworkStats } from "@/lib/txc/pool";
 import {
   difficultyFromChunks,
   hashrateFromBlocks,
