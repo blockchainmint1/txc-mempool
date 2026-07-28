@@ -27,45 +27,61 @@ export interface PoolNetworkStats {
   poolWorkers: number | null;
 }
 
+async function fetchOne(
+  url: string,
+  timeoutMs: number,
+): Promise<PoolNetworkStats | null> {
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) return null;
+  // The endpoint prefixes its JSON with whitespace/newlines, and some
+  // deployments emit a stray BOM — slice from the first brace.
+  const text = await res.text();
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  const json = JSON.parse(text.slice(start)) as Record<string, unknown>;
+  const txc = json.TXC as Record<string, unknown> | undefined;
+  if (!txc) return null;
+
+  const num = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const difficulty = num(txc.difficulty) ?? 0;
+  // Prefer the pool's published figure; if it reports 0 (some yiimp builds
+  // never populate it), derive it from difficulty and target spacing.
+  const hashrate =
+    num(txc.network_hashrate) ??
+    (difficulty > 0 ? (difficulty * 2 ** 32) / TARGET_SPACING : null);
+  if (!hashrate) return null;
+
+  return {
+    networkHashrate: hashrate,
+    difficulty,
+    height: num(txc.height) ?? 0,
+    reward: num(txc.reward),
+    blocks24h: num(txc["24h_blocks"]),
+    poolWorkers: Number.isFinite(Number(txc.workers)) ? Number(txc.workers) : null,
+  };
+}
+
 /**
- * Fetch TXC network stats from the pool. Returns null on any failure so
- * callers can fall back to locally-computed values.
+ * Fetch TXC network stats from the pool. Tries each host in order and returns
+ * null if all fail, so callers can fall back to locally-computed values.
  */
 export async function fetchPoolNetworkStats(
   timeoutMs = 4000,
 ): Promise<PoolNetworkStats | null> {
-  try {
-    const res = await fetch(POOL_API, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!res.ok) return null;
-    // The endpoint prefixes its JSON with whitespace/newlines, and some
-    // deployments emit a stray BOM — slice from the first brace.
-    const text = await res.text();
-    const start = text.indexOf("{");
-    if (start < 0) return null;
-    const json = JSON.parse(text.slice(start)) as Record<string, unknown>;
-    const txc = json.TXC as Record<string, unknown> | undefined;
-    if (!txc) return null;
-
-    const hashrate = Number(txc.network_hashrate);
-    if (!Number.isFinite(hashrate) || hashrate <= 0) return null;
-
-    const num = (v: unknown) => {
-      const n = Number(v);
-      return Number.isFinite(n) && n > 0 ? n : null;
-    };
-
-    return {
-      networkHashrate: hashrate,
-      difficulty: num(txc.difficulty) ?? 0,
-      height: num(txc.height) ?? 0,
-      reward: num(txc.reward),
-      blocks24h: num(txc["24h_blocks"]),
-      poolWorkers: Number.isFinite(Number(txc.workers)) ? Number(txc.workers) : null,
-    };
-  } catch {
-    return null;
+  for (const url of POOL_APIS) {
+    try {
+      const stats = await fetchOne(url, timeoutMs);
+      if (stats) return stats;
+    } catch {
+      // try the next host
+    }
   }
+  return null;
 }
