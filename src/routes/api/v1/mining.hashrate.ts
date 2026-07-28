@@ -94,14 +94,19 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
           return errorResponse("no block data returned from backend", 502);
         }
 
-        // Current = pooled work over the 3 most-recent chunks (~45 blocks).
-        // A single 15-block chunk swings 2-3x on luck alone; pooling gives a
-        // number that actually tracks the miners instead of the dice.
+        // Current = median of the 3 most-recent chunk estimates. Chunks are
+        // non-contiguous so we can't pool their blocks (the gaps would inflate
+        // the time span); a median across them kills luck-driven outliers that
+        // made a single 15-block chunk swing 2-3x.
         const byHeight = [...populated].sort(
           (a, b) => Math.max(...b.map((x) => x.height)) - Math.max(...a.map((x) => x.height)),
         );
-        const recentBlocks = byHeight.slice(0, 3).flat();
-        const currentHashrate = hashrateFromBlocks(recentBlocks);
+        const recent = byHeight.slice(0, 3).map(hashrateFromBlocks).filter((h) => h > 0).sort((a, b) => a - b);
+        const currentHashrate = recent.length
+          ? recent.length % 2
+            ? recent[recent.length >> 1]
+            : (recent[recent.length / 2 - 1] + recent[recent.length / 2]) / 2
+          : 0;
         const currentDifficulty = byHeight[0]?.[0]?.difficulty ?? 0;
 
         const body = {
