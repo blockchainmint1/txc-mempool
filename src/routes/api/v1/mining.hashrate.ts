@@ -84,6 +84,10 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
           );
         }
 
+        // Pool stats and tip lookup run in parallel — the pool call is
+        // best-effort and never blocks the response.
+        const poolPromise = fetchPoolNetworkStats();
+
         let tip: number;
         try {
           tip = await fetchTipHeight();
@@ -100,20 +104,24 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
           return errorResponse("no block data returned from backend", 502);
         }
 
-        // Current = median of the 3 most-recent chunk estimates. Chunks are
-        // non-contiguous so we can't pool their blocks (the gaps would inflate
-        // the time span); a median across them kills luck-driven outliers that
-        // made a single 15-block chunk swing 2-3x.
+        // Fallback "current": median of the 3 most-recent chunk estimates.
+        // Chunks are non-contiguous so we can't pool their blocks (the gaps
+        // would inflate the time span); a median across them kills luck-driven
+        // outliers that made a single 15-block chunk swing 2-3x.
         const byHeight = [...populated].sort(
           (a, b) => Math.max(...b.map((x) => x.height)) - Math.max(...a.map((x) => x.height)),
         );
         const recent = byHeight.slice(0, 3).map(hashrateFromBlocks).filter((h) => h > 0).sort((a, b) => a - b);
-        const currentHashrate = recent.length
+        const computedHashrate = recent.length
           ? recent.length % 2
             ? recent[recent.length >> 1]
             : (recent[recent.length / 2 - 1] + recent[recent.length / 2]) / 2
           : 0;
-        const currentDifficulty = byHeight[0]?.[0]?.difficulty ?? 0;
+        const computedDifficulty = byHeight[0]?.[0]?.difficulty ?? 0;
+
+        const pool = await poolPromise;
+        const currentHashrate = pool?.networkHashrate ?? computedHashrate;
+        const currentDifficulty = pool?.difficulty || computedDifficulty;
 
         const body = {
           window: windowParam,
@@ -121,11 +129,19 @@ export const Route = createFileRoute("/api/v1/mining/hashrate")({
           computedAt: Math.floor(Date.now() / 1000),
           currentHashrate,
           currentDifficulty,
+          /** Where `currentHashrate` came from. */
+          source: pool ? ("pool" as const) : ("chain" as const),
+          /** Chain-derived estimate, always present for comparison. */
+          computedHashrate,
+          poolWorkers: pool?.poolWorkers ?? null,
+          blocks24h: pool?.blocks24h ?? null,
+          blockReward: pool?.reward ?? null,
           hashrates: seriesFromChunks(populated),
           difficulty: difficultyFromChunks(populated),
           formula: "hashrate = difficulty * 2^32 / avg_block_time_sec",
           sampleSizePerPoint: 15,
         };
+
 
         // Edge-cache: 1d window churns; 1y is basically static.
         const cacheSeconds = windowParam === "1d" ? 60 : windowParam === "1w" ? 300 : 1800;
