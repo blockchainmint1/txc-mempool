@@ -6,7 +6,16 @@
 // noisy (Poisson solve times). We use the pool for the headline "now" number
 // and keep the chain math for history + as a fallback if the pool is down.
 
-const POOL_API = "https://pool.texitcoin.org/api/currencies";
+// Primary is the new honest.money pool API; the legacy yiimp host stays as a
+// fallback. Some deployments report `network_hashrate: 0`, in which case we
+// derive it from the live difficulty and the 180s target spacing.
+const POOL_APIS = [
+  "https://pool.honest.money/api/currencies",
+  "https://pool.texitcoin.org/api/currencies",
+];
+
+/** TXC target block spacing, seconds. */
+const TARGET_SPACING = 180;
 
 export interface PoolNetworkStats {
   /** Network hashrate in H/s. */
