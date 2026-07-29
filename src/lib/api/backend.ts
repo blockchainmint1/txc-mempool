@@ -19,7 +19,11 @@ export async function proxy(
   const url = `${BACKEND_URL}${path}`;
   let res: Response;
   try {
-    res = await fetch(url, { headers: { Accept: "application/json, text/plain, */*" } });
+    res = await fetch(url, {
+      headers: { Accept: "application/json, text/plain, */*" },
+      // Never hang on an unresponsive upstream endpoint.
+      signal: AbortSignal.timeout(15_000),
+    });
   } catch (e) {
     console.error("Backend fetch failed", { path, error: e });
     return errorResponse("Upstream unavailable", 502);
@@ -62,6 +66,7 @@ export async function proxyPost(path: string, request: Request): Promise<Respons
         Accept: "application/json, text/plain, */*",
       },
       body: await request.text(),
+      signal: AbortSignal.timeout(20_000),
     });
   } catch (e) {
     console.error("Backend POST failed", { path, error: e });

@@ -72,8 +72,11 @@ export const REST_GROUPS: EndpointGroup[] = [
     description: "Pool rankings, difficulty adjustment.",
     endpoints: [
       { method: "GET", path: "/api/v1/mining/pools/24h", summary: "Pool block share over the last 24 hours." },
-      { method: "GET", path: "/api/v1/mining/pools/1w", summary: "Pool block share over the last 7 days." },
+      { method: "GET", path: "/api/v1/mining/pools/1w",
+        summary: "Pool block share over a window (24h | 1w | 1m). Computed locally by attributing each sampled block to the coinbase payout address that received its reward, so it works without upstream pool indexing. `blockCount` is the number of blocks actually inspected; `windowBlockCount` is the estimated total in the window. Edge-cached 10 min.",
+        example: `{\n  "window": "1w",\n  "pools": [\n    {\n      "poolId": 1,\n      "name": "honest.money",\n      "slug": "honest-money",\n      "link": "https://pool.honest.money",\n      "address": "TjfL5Kq58h8VaJMWRkHi2T5wxA5eV6HVwB",\n      "blockCount": 36,\n      "rank": 1,\n      "emptyBlocks": 26\n    }\n  ],\n  "blockCount": 36,\n  "windowBlockCount": 3360,\n  "sampled": true,\n  "lastEstimatedHashrate": 15517223062374.5,\n  "tipHeight": 332595\n}` },
       { method: "GET", path: "/api/v1/mining/pools/1m", summary: "Pool block share over the last 30 days." },
+
       { method: "GET", path: "/api/v1/difficulty-adjustment", summary: "Progress and ETA to the next retarget." },
       { method: "GET", path: "/api/v1/mining/hashrate?window=1w",
         summary: "Network hashrate + difficulty time series. window = 1d | 1w | 1m | 3m | 1y. `currentHashrate` is read live from the TEXITcoin pool (steadiest figure available); if the pool is unreachable it falls back to the chain-derived estimate and `source` becomes \"chain\". `computedHashrate` is always the chain-derived value (difficulty × 2³² ÷ avg_block_time) so you can compare. History is always chain-derived. Edge-cached.",
