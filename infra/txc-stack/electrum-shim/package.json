@@ -1,0 +1,20 @@
+{
+  "name": "txc-electrum-shim",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Electrum protocol front door for the TXC mempool stack. Replaces ElectrumX.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.json && node dist/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.7.5",
+    "typescript": "^5.6.3"
+  }
+}

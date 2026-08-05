@@ -10,6 +10,7 @@ the data path. Spin this up on a VPS, point the frontend at it, done.
 |---------------|--------------------------------------------------|-------------------------------------------|------|
 | `texitcoind`  | host install (node-spinner)                      | Full TXC node — source of truth           | 8332 (RPC, internal only) |
 | `indexer`     | `./indexer/` (custom, TypeScript)                | Esplora-compatible address index over RPC | 3001 (internal) |
+| `electrum`    | `./electrum-shim/` (custom, TypeScript)          | Electrum protocol endpoint for the TXC Wallet app | 50002 (TLS) |
 | `mempool-api` | `mempool/backend:latest` (MEMPOOL_BACKEND=none)  | mempool.space REST + WS (everything except address) | 8999 (internal) |
 | `mempool-db`  | `mariadb:11`                                     | mempool backend's stats DB                | internal |
 | `nginx`       | `nginx:alpine`                                   | TLS termination + `/api` routing          | 80 / 443 |
@@ -18,6 +19,12 @@ There is **no electrs** in this stack — we replaced it with our own
 `txc-indexer` (see `./indexer/README.md`) because stock electrs doesn't
 support TXC's network parameters. Nginx routes `/api/address/*` straight to
 the indexer and everything else to `mempool-api`.
+
+There is also **no ElectrumX**. The mobile wallet's Electrum protocol needs are
+served by `./electrum-shim/`, which reads the indexer's SQLite and calls
+`texitcoind` RPC — no second chain index to sync. Migration steps:
+[`ELECTRUM_MIGRATION_RUNBOOK.md`](./ELECTRUM_MIGRATION_RUNBOOK.md).
+
 
 The frontend (this Lovable project) talks to **nginx only**, at the same
 domain (`/api`, `/api/v1/ws`). It's a single constant to switch:
@@ -79,6 +86,8 @@ custom indexer serves the Esplora address routes mempool/backend skips when
 docker-compose.yml         # the whole stack
 .env.example               # config — copy to .env and edit
 indexer/                   # custom Esplora-compatible address indexer
+electrum-shim/             # Electrum protocol endpoint (replaces ElectrumX)
+ELECTRUM_MIGRATION_RUNBOOK.md  # copy/paste steps to retire the ElectrumX boxes
 texitcoind/Dockerfile      # optional dockerized node (host install is preferred)
 texitcoind/texitcoin.conf  # node config (RPC on, txindex on)
 nginx/nginx.conf           # reverse proxy w/ TLS + WS upgrade
