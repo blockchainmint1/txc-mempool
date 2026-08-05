@@ -14,6 +14,7 @@ import {
 } from "./db.js";
 import { getFeeEstimate, getRelayFee } from "./fees.js";
 import { isSpentInMempool, pendingCredit, pendingUtxos } from "./mempool.js";
+import { merkleBranch } from "./merkle.js";
 import { historyStatus } from "./scripthash.js";
 import {
   getBlockCount,
