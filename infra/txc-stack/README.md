@@ -86,6 +86,8 @@ custom indexer serves the Esplora address routes mempool/backend skips when
 docker-compose.yml         # the whole stack
 .env.example               # config — copy to .env and edit
 indexer/                   # custom Esplora-compatible address indexer
+electrum-shim/             # Electrum protocol endpoint (replaces ElectrumX)
+ELECTRUM_MIGRATION_RUNBOOK.md  # copy/paste steps to retire the ElectrumX boxes
 texitcoind/Dockerfile      # optional dockerized node (host install is preferred)
 texitcoind/texitcoin.conf  # node config (RPC on, txindex on)
 nginx/nginx.conf           # reverse proxy w/ TLS + WS upgrade
