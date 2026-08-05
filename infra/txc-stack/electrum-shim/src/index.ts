@@ -15,7 +15,12 @@ const TLS_CERT = process.env.TLS_CERT ?? "";
 const TLS_KEY = process.env.TLS_KEY ?? "";
 const TIP_POLL_MS = Number(process.env.TIP_POLL_MS ?? 5000);
 const MAP_REFRESH_MS = Number(process.env.MAP_REFRESH_MS ?? 60_000);
+// LOG_REQUESTS=true logs every single call, which floods the container log on a
+// live wallet (a HD scan is hundreds of get_balance calls). Default behaviour is
+// to count calls per method and report them once in the periodic health line.
 const LOG_REQUESTS = process.env.LOG_REQUESTS === "true";
+const LOG_CONNECTIONS = process.env.LOG_CONNECTIONS !== "false";
+const methodCounts = new Map<string, number>();
 const MAX_LINE = 2 * 1024 * 1024;
 
 interface Client {
@@ -44,7 +49,9 @@ async function handleOne(req: Record<string, unknown>, c: Client): Promise<unkno
   const params = Array.isArray(req.params) ? req.params : [];
   requestCount++;
 
-  if (LOG_REQUESTS) {
+  methodCounts.set(method || "<missing>", (methodCounts.get(method || "<missing>") ?? 0) + 1);
+  // Sends are rare and worth a line each; everything else is counted, not logged.
+  if (LOG_REQUESTS || method === "blockchain.transaction.broadcast") {
     console.log(`[electrum] request ${method || "<missing>"}`);
   }
 
@@ -103,7 +110,7 @@ function attach(socket: net.Socket): void {
   const c: Client = { socket, buf: "", headersSub: false, scripthashSubs: new Map() };
   clients.add(c);
 
-  if (LOG_REQUESTS) {
+  if (LOG_CONNECTIONS) {
     console.log(`[electrum] client connected (${clients.size} active)`);
   }
 
@@ -123,7 +130,7 @@ function attach(socket: net.Socket): void {
   socket.on("error", () => socket.destroy());
   socket.on("close", () => {
     clients.delete(c);
-    if (LOG_REQUESTS) {
+    if (LOG_CONNECTIONS) {
       console.log(`[electrum] client disconnected (${clients.size} active)`);
     }
   });
@@ -225,6 +232,13 @@ function start(): void {
           `txs=${stats.indexedTransactions}, clients=${clients.size}, requests=${requestCount}, ` +
           `errors=${errorCount}, slow=${slowRequestCount}`,
       );
+      const top = [...methodCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([m, n]) => `${m}=${n}`)
+        .join(" ");
+      if (top) console.log(`[electrum] calls last 60s: ${top}`);
+      methodCounts.clear();
     } catch (e) {
       console.error("[electrum] health check failed:", (e as Error).message);
     }
