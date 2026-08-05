@@ -79,3 +79,7 @@ export const getMempoolInfo = () =>
 
 export const getBlockVerbose1 = (hash: string) =>
   rpc<{ height: number; tx: string[] }>("getblock", [hash, 1]);
+
+export const getRawMempoolTxids = () => rpc<string[]>("getrawmempool", [false]);
+export const decodeRawTx = (hex: string) =>
+  rpc<{ txid: string; vin: { txid?: string; vout?: number }[] }>("decoderawtransaction", [hex]);
