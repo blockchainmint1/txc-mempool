@@ -49,7 +49,8 @@ export function NetworkDifficultyChart() {
     },
     refetchInterval: 5 * 60_000,
     staleTime: 5 * 60_000,
-    retry: 0,
+    retry: 2,
+    retryDelay: (a) => 1000 * 2 ** a,
   });
 
   const xTickFormat = (t: number) => {
