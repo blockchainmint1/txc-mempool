@@ -139,6 +139,27 @@ export function refreshMempoolScripthashes(): { added: number; scanned: number }
   return { added, scanned: rows.length };
 }
 
+/**
+ * Map an explicit list of addresses (e.g. everything currently paying out in
+ * the mempool snapshot). Lets a first-ever incoming payment become resolvable
+ * within seconds instead of waiting for the indexer's mempool table.
+ */
+export function mapAddresses(addresses: Iterable<string>): number {
+  let added = 0;
+  const run = map.transaction((list: string[]) => {
+    for (const address of list) {
+      if (!address) continue;
+      const sh = addressToScripthash(address);
+      if (!sh) continue;
+      if (insertSh.run(sh, address).changes) added++;
+    }
+  });
+  run([...addresses]);
+  return added;
+}
+
+
+
 
 // ---- Address-level queries (the actual Electrum payloads) ----
 
