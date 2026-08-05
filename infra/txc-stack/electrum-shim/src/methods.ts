@@ -224,10 +224,14 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
       try {
         return await sendRawTx(hex);
       } catch (e) {
+        const raw = (e as Error).message || "broadcast failed";
+        const friendly = await explainBroadcastFailure(hex, raw);
+        if (friendly.txid) return friendly.txid; // already accepted — treat as success
         // Electrum clients surface this string to the user verbatim.
-        throw new RpcFault(1, (e as Error).message || "broadcast failed");
+        throw new RpcFault(1, friendly.message);
       }
     }
+
     case "blockchain.transaction.id_from_pos": {
       const height = Number(params[0]);
       const pos = Number(params[1]);
