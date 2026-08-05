@@ -17,14 +17,17 @@
 #   3. Publish 443 from the nginx container as usual, and add 50002 too.
 
 stream {
+    # Docker's embedded DNS. REQUIRED: nginx resolves a static `upstream
+    # { server electrum:50002; }` only once at startup, so it keeps dialling a
+    # dead IP after the shim container is recreated and connections hang. A
+    # variable proxy_pass target is resolved per connection instead.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
     # electrum1.texitcoin.org, electrum2..., electrum.texitcoin.org -> shim
     map $ssl_preread_server_name $txc_upstream {
-        ~^electrum   electrum_backend;
-        default      https_backend;
+        ~^electrum   electrum:50002;
+        default      127.0.0.1:8443;
     }
-
-    upstream electrum_backend { server electrum:50002; }
-    upstream https_backend    { server 127.0.0.1:8443; }
 
     server {
         listen 443;
@@ -35,3 +38,4 @@ stream {
         proxy_connect_timeout 5s;
     }
 }
+
