@@ -90,18 +90,34 @@ export function scripthashToAddress(scripthash: string): string | null {
 
 /**
  * Walk every address the indexer knows about and make sure it has a
- * scripthash entry. Cheap after the first pass because the insert is
- * INSERT OR IGNORE against a primary key.
+ * scripthash entry.
+ *
+ * Hard-won constraint: the indexer database has NO index on `height`, so any
+ * `WHERE height > ?` filter degenerates into a synchronous full table scan
+ * (minutes on a live chain). better-sqlite3 is synchronous, so that scan
+ * freezes Node's event loop — TLS handshakes stall and iOS reports "Network
+ * Error"/the container health check fails. We therefore page through each
+ * table by `rowid`, which is always the b-tree primary key: every chunk is a
+ * bounded index range read, and we yield to the event loop between chunks.
  */
-// The side-car survives container rebuilds. If it already has rows, resume from
-// a small overlap near the current tip instead of re-running a full-chain scan
-// during every boot (the exact window in which phones reconnect). A brand-new
-// installation still performs the complete one-time backfill.
-const existingMappedRows = (map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
-  count: number;
-}).count;
-let mappedThroughHeight: number | null =
-  existingMappedRows > 0 ? Math.max(-1, indexerTipHeight() - 12) : null;
+map.exec(`CREATE TABLE IF NOT EXISTS watermarks (name TEXT PRIMARY KEY, rowid_max INTEGER NOT NULL)`);
+const readWatermark = map.prepare("SELECT rowid_max FROM watermarks WHERE name = ?");
+const writeWatermark = map.prepare(
+  "INSERT INTO watermarks(name, rowid_max) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET rowid_max = excluded.rowid_max",
+);
+
+function getWatermark(name: string): number {
+  const row = readWatermark.get(name) as { rowid_max: number } | undefined;
+  return row?.rowid_max ?? 0;
+}
+
+// Tables scanned incrementally by rowid. `balances` is included so a rebuilt
+// side-car still backfills historic addresses, just in bounded chunks.
+const SOURCE_TABLES = ["balances", "address_txs", "outputs"] as const;
+const CHUNK = 2_000;
+// Upper bound on rows examined per pass, so a periodic refresh can never turn
+// into a multi-minute stall even mid-backfill; the next pass resumes.
+const MAX_ROWS_PER_PASS = 40_000;
 
 export async function refreshScripthashMap(): Promise<{
   added: number;
@@ -110,60 +126,53 @@ export async function refreshScripthashMap(): Promise<{
   ms: number;
 }> {
   const startedAt = Date.now();
-  const tip = indexerTipHeight();
-  // The first pass validates/backfills the complete side-car. Every later pass
-  // only examines newly indexed block rows. The previous implementation ran
-  // four full-chain UNION/DISTINCT scans every minute; because better-sqlite3
-  // is synchronous, that periodically froze Node's TLS event loop and iOS
-  // reported the handshake timeout as a generic "Network Error".
-  const rows = mappedThroughHeight === null
-    ? (idx
-        .prepare(
-          `SELECT address FROM balances
-           UNION
-           SELECT DISTINCT address FROM address_txs WHERE address IS NOT NULL
-           UNION
-           SELECT DISTINCT address FROM outputs WHERE address IS NOT NULL
-           UNION
-           SELECT DISTINCT address FROM mempool_address_txs WHERE address IS NOT NULL`,
-        )
-        .all() as { address: string }[])
-    : (idx
-        .prepare(
-          `SELECT DISTINCT address FROM outputs
-           WHERE address IS NOT NULL AND height > ?
-           UNION
-           SELECT DISTINCT address FROM address_txs
-           WHERE address IS NOT NULL AND height > ?
-           UNION
-           SELECT DISTINCT address FROM mempool_address_txs
-           WHERE address IS NOT NULL`,
-        )
-        .all(mappedThroughHeight, mappedThroughHeight) as { address: string }[]);
   let added = 0;
+  let scanned = 0;
+
   const insertBatch = map.transaction((list: { address: string }[]) => {
     for (const { address } of list) {
       if (!address) continue;
       const sh = addressToScripthash(address);
       if (!sh) continue;
-      const res = insertSh.run(sh, address);
-      if (res.changes) added++;
+      if (insertSh.run(sh, address).changes) added++;
     }
   });
-  // better-sqlite3 and address hashing are synchronous. Processing the entire
-  // chain's address set in one transaction blocks Electrum socket responses,
-  // so yield to the event loop between bounded batches.
-  const batchSize = 500;
-  for (let offset = 0; offset < rows.length; offset += batchSize) {
-    insertBatch(rows.slice(offset, offset + batchSize));
-    await new Promise<void>((resolve) => setImmediate(resolve));
+
+  for (const table of SOURCE_TABLES) {
+    let cursor = getWatermark(table);
+    const select = idx.prepare(
+      `SELECT rowid AS rid, address FROM ${table}
+       WHERE rowid > ? AND address IS NOT NULL
+       ORDER BY rowid ASC LIMIT ${CHUNK}`,
+    );
+    while (scanned < MAX_ROWS_PER_PASS) {
+      const rows = select.all(cursor) as { rid: number; address: string }[];
+      if (rows.length === 0) break;
+      insertBatch(rows);
+      scanned += rows.length;
+      cursor = rows[rows.length - 1]!.rid;
+      writeWatermark.run(table, cursor);
+      // Give sockets, TLS handshakes and RPC callbacks a turn.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      if (rows.length < CHUNK) break;
+    }
   }
+
+  // Mempool addresses are a handful of rows — always mapped in full.
+  const pending = idx
+    .prepare("SELECT DISTINCT address FROM mempool_address_txs WHERE address IS NOT NULL")
+    .all() as { address: string }[];
+  if (pending.length) {
+    insertBatch(pending);
+    scanned += pending.length;
+  }
+
   const total = (map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
     count: number;
   }).count;
-  mappedThroughHeight = tip;
-  return { added, scanned: rows.length, total, ms: Date.now() - startedAt };
+  return { added, scanned, total, ms: Date.now() - startedAt };
 }
+
 
 /**
  * Map only the addresses touched by the current mempool. This is a handful of
