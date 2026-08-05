@@ -15,6 +15,7 @@
 // Everything is answered from memory; refreshes never block a client call.
 
 import { getRawMempoolTxids, getRawTxVerbose } from "./rpc.js";
+import { mapAddresses } from "./db.js";
 
 const REFRESH_MS = Number(process.env.MEMPOOL_SNAPSHOT_MS ?? 8_000);
 
@@ -100,6 +101,10 @@ async function refresh(): Promise<void> {
     }
 
     snapshot = { pendingByAddress, spent, at: Date.now(), txids: txids.length };
+    // Make every address in the live mempool resolvable from its scripthash
+    // right away — this is what lets a fresh wallet see its first incoming
+    // payment instead of answering "unknown scripthash" with a zero balance.
+    if (pendingByAddress.size > 0) mapAddresses(pendingByAddress.keys());
   } catch {
     // Keep serving the previous snapshot; a node hiccup must not break balances.
   } finally {
@@ -120,6 +125,10 @@ export function isSpentInMempool(txid: string, vout: number): boolean {
 /** Sum of pending outputs paying `address`, in satoshis. */
 export function pendingCredit(address: string): number {
   return pendingUtxos(address).reduce((sum, u) => sum + u.value, 0);
+}
+
+export function pendingAddresses(): string[] {
+  return [...snapshot.pendingByAddress.keys()];
 }
 
 export function mempoolSnapshotStats(): { txids: number; addresses: number; ageMs: number } {
