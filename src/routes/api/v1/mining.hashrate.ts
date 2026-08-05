@@ -33,11 +33,40 @@ interface ApiBlock {
   difficulty: number;
 }
 
+// Upstream blips (a saturated RPC queue, a brief nginx reload) used to turn
+// into a hard 502 here and blank the chart. Every read now times out fast and
+// retries a couple of times with backoff.
+async function fetchWithRetry(
+  url: string,
+  { tries = 3, timeoutMs = 8000 }: { tries?: number; timeoutMs?: number } = {},
+): Promise<Response | null> {
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: { Accept: "application/json, text/plain, */*" },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok) return res;
+      // 4xx won't fix itself; only retry server-side/transport failures.
+      if (res.status < 500) return null;
+    } catch {
+      // network/timeout — fall through to retry
+    }
+    if (attempt < tries - 1) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+  }
+  return null;
+}
+
 async function fetchBlocksAt(height: number): Promise<BlockHeaderLite[]> {
-  const url = `${BACKEND}/v1/blocks/${height}`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) return [];
-  const arr = (await res.json()) as ApiBlock[];
+  const res = await fetchWithRetry(`${BACKEND}/v1/blocks/${height}`);
+  if (!res) return [];
+  let arr: ApiBlock[];
+  try {
+    arr = (await res.json()) as ApiBlock[];
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(arr)) return [];
   return arr.map((b) => ({
     height: b.height,
     timestamp: b.timestamp,
@@ -46,9 +75,11 @@ async function fetchBlocksAt(height: number): Promise<BlockHeaderLite[]> {
 }
 
 async function fetchTipHeight(): Promise<number> {
-  const res = await fetch(`${BACKEND}/v1/blocks/tip/height`);
-  if (!res.ok) throw new Error(`tip ${res.status}`);
-  return Number(await res.text());
+  const res = await fetchWithRetry(`${BACKEND}/v1/blocks/tip/height`, { timeoutMs: 6000 });
+  if (!res) throw new Error("tip unavailable");
+  const height = Number((await res.text()).trim());
+  if (!Number.isFinite(height) || height <= 0) throw new Error("tip invalid");
+  return height;
 }
 
 // Run promises with limited concurrency to be polite to the backend.
