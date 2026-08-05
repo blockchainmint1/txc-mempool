@@ -113,6 +113,10 @@ services:
       - ./data/electrum:/data
       - ./data/certbot/conf:/etc/letsencrypt:ro
     ports:
+      # 50002 = TLS. 50001 = plain TCP: older wallet builds (including the
+      # shipped iOS app) hardcode the legacy ElectrumX port and silently hang
+      # if it isn't reachable, so it must be published too.
+      - "50001:50001"
       - "50002:50002"
     # "started" is not enough: after a reboot the process still needs to open
     # SQLite and bind TLS. Validate an actual Electrum round trip before nginx
