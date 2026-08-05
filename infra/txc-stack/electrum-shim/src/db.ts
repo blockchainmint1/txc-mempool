@@ -93,7 +93,15 @@ export function scripthashToAddress(scripthash: string): string | null {
  * scripthash entry. Cheap after the first pass because the insert is
  * INSERT OR IGNORE against a primary key.
  */
-let mappedThroughHeight: number | null = null;
+// The side-car survives container rebuilds. If it already has rows, resume from
+// a small overlap near the current tip instead of re-running a full-chain scan
+// during every boot (the exact window in which phones reconnect). A brand-new
+// installation still performs the complete one-time backfill.
+const existingMappedRows = (map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
+  count: number;
+}).count;
+let mappedThroughHeight: number | null =
+  existingMappedRows > 0 ? Math.max(-1, indexerTipHeight() - 12) : null;
 
 export async function refreshScripthashMap(): Promise<{
   added: number;
