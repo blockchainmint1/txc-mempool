@@ -8,7 +8,6 @@ import {
   indexerTipHeight,
   listUnspent,
   mempoolHistory,
-  refreshScripthashMap,
   scripthashToAddress,
   unconfirmedBalance,
 } from "./db.js";
@@ -42,12 +41,11 @@ export class RpcFault extends Error {
 
 /** Resolve a scripthash to the address our indexer keys on. */
 function addressFor(scripthash: string): string | null {
-  const direct = scripthashToAddress(scripthash);
-  if (direct) return direct;
-  // Unknown scripthash: a brand-new address the map hasn't picked up yet, or
-  // an address with zero on-chain activity. Refresh once, then give up — an
-  // empty answer is the correct Electrum reply for an unused scripthash.
-  refreshScripthashMap();
+  // The map is refreshed centrally on a timer. Never rebuild it here: HD
+  // wallets scan many unused addresses, and rebuilding the complete map once
+  // for every unknown scripthash blocks the event loop and makes fee loading
+  // and sends appear to hang. An unknown/unused scripthash correctly has no
+  // history, balance, or UTXOs.
   return scripthashToAddress(scripthash);
 }
 
@@ -133,7 +131,14 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
     case "blockchain.estimatefee": {
       const target = Math.max(1, Number(params[0]) || 1);
       const est = await estimateSmartFee(target).catch(() => null);
-      return toElectrumFee(est?.feerate);
+      const estimated = toElectrumFee(est?.feerate);
+      if (estimated > 0) return estimated;
+
+      // Sparse chains often cannot produce a statistical estimate. Returning
+      // Electrum's -1 sentinel leaves some legacy wallet fee UIs spinning, so
+      // use the node's live mempool/relay floor as a safe coin-per-kB fallback.
+      const info = await getMempoolInfo().catch(() => null);
+      return Math.max(info?.mempoolminfee ?? 0, info?.minrelaytxfee ?? 0, 0.00001);
     }
     case "blockchain.relayfee": {
       const info = await getMempoolInfo().catch(() => null);
