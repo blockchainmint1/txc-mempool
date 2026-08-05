@@ -110,12 +110,16 @@ export interface Utxo {
 export function listUnspent(address: string): Utxo[] {
   return idx
     .prepare(
-      `SELECT txid AS tx_hash, vout AS tx_pos, height, value FROM outputs
+      // COALESCE: Electrum clients expect height 0 (unconfirmed), never NULL —
+      // a NULL here makes bitcoinjs-based wallets drop the whole UTXO.
+      `SELECT txid AS tx_hash, vout AS tx_pos, COALESCE(height, 0) AS height, value
+       FROM outputs
        WHERE address = ? AND spent_txid IS NULL
        ORDER BY height ASC, txid ASC, vout ASC`,
     )
     .all(address) as Utxo[];
 }
+
 
 export function indexerTipHeight(): number {
   const row = idx.prepare("SELECT MAX(height) AS h FROM blocks").get() as { h: number | null };
