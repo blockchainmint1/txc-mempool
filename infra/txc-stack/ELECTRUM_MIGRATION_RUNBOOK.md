@@ -187,7 +187,23 @@ printf '{"id":1,"method":"server.version","params":["probe","1.4"]}\n' | openssl
 
 ## Step 5 — decide how phones reach it
 
-**Option A (recommended, no app release): keep port 443.**
+**Option A (recommended, no app release): keep port 443.** One command does it —
+it backs up nginx.conf, moves the HTTPS vhost to 8443, adds the SNI router on
+443, validates with `nginx -t`, and rolls back automatically if validation fails:
+
+```bash
+cd /opt/txc-mempool && git pull
+bash /opt/txc-mempool/infra/txc-stack/nginx/apply-sni-443.sh
+```
+
+Verify from your laptop afterwards:
+
+```bash
+printf '{"id":1,"method":"server.version","params":["probe","1.4"]}\n' | openssl s_client -quiet -connect electrum1.texitcoin.org:443 2>/dev/null | head -1
+curl -s https://mempool.texitcoin.org/api/blocks/tip/height
+```
+
+Background:
 Installed apps hardcode port `443`. `nginx/stream-sni.conf.example` shows how to
 route 443 by SNI — `electrum*` hostnames pass through to the shim, everything
 else goes to the HTTPS API. Existing installs then work with only the DNS change
