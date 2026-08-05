@@ -30,7 +30,23 @@ interface Client {
   transport: "tcp" | "tls";
   headersSub: boolean;
   scripthashSubs: Map<string, string | null>;
+  /** Client name from server.version, e.g. "TXC Wallet" or "healthcheck". */
+  name?: string;
 }
+
+/** Docker's own probe — never worth tracing. */
+function isProbe(c: Client): boolean {
+  return c.name === "healthcheck";
+}
+
+function summarize(result: unknown): string {
+  if (result === null || result === undefined) return String(result);
+  if (Array.isArray(result)) return `array(${result.length})`;
+  if (typeof result === "object") return `object(${Object.keys(result as object).length} keys)`;
+  const s = String(result);
+  return s.length > 60 ? `${s.slice(0, 60)}…` : s;
+}
+
 
 const clients = new Set<Client>();
 let requestCount = 0;
@@ -69,11 +85,17 @@ async function handleOne(req: Record<string, unknown>, c: Client): Promise<unkno
   if (method === "server.version") {
     const clientName = String(params[0] ?? "<unknown>").slice(0, 120);
     const protocol = String(params[1] ?? "<unspecified>").slice(0, 40);
+    c.name = clientName;
     console.log(
       `[electrum] handshake transport=${c.transport} peer=${peerLabel(c.socket)} ` +
         `client=${JSON.stringify(clientName)} protocol=${JSON.stringify(protocol)}`,
     );
   }
+  // Real wallet clients get a full per-call trace (method, first arg, timing,
+  // shape of the answer). Only the Docker healthcheck is excluded, so the log
+  // stays readable while showing exactly where a phone session stalls.
+  const trace = !isProbe(c);
+  const arg0 = params.length ? String(params[0] ?? "").slice(0, 24) : "";
 
   try {
     if (method === "blockchain.headers.subscribe") c.headersSub = true;
@@ -81,6 +103,11 @@ async function handleOne(req: Record<string, unknown>, c: Client): Promise<unkno
       const sh = String(params[0] ?? "").toLowerCase();
       const status = statusFor(sh);
       c.scripthashSubs.set(sh, status);
+      if (trace) {
+        console.log(
+          `[electrum] <${c.name ?? "?"}> ${method} ${arg0} -> ${status === null ? "null" : "status"}`,
+        );
+      }
       return { jsonrpc: "2.0", id, result: status };
     }
     if (method === "blockchain.scripthash.unsubscribe") {
@@ -93,13 +120,23 @@ async function handleOne(req: Record<string, unknown>, c: Client): Promise<unkno
       slowRequestCount++;
       console.warn(`[electrum] slow request ${method} ${elapsed}ms`);
     }
+    if (trace) {
+      console.log(
+        `[electrum] <${c.name ?? "?"}> ${method}${arg0 ? ` ${arg0}` : ""} ` +
+          `${elapsed}ms -> ${summarize(result)}`,
+      );
+    }
     return { jsonrpc: "2.0", id, result };
   } catch (e) {
     errorCount++;
     const fault = e instanceof RpcFault ? e : new RpcFault(1, (e as Error).message);
-    console.error(`[electrum] ${method} failed:`, fault.message);
+    console.error(
+      `[electrum] <${c.name ?? "?"}> ${method}${arg0 ? ` ${arg0}` : ""} FAILED:`,
+      fault.message,
+    );
     return { jsonrpc: "2.0", id, error: { code: fault.code, message: fault.message } };
   }
+
 }
 
 async function onLine(line: string, c: Client): Promise<void> {
