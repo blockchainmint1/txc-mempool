@@ -111,6 +111,26 @@ services:
       - ./data/certbot/conf:/etc/letsencrypt:ro
     ports:
       - "50002:50002"
+    # "started" is not enough: after a reboot the process still needs to open
+    # SQLite and bind TLS. Validate an actual Electrum round trip before nginx
+    # exposes the wallet hostnames on port 443.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          const tls=require('tls');
+          const s=tls.connect({host:'127.0.0.1',port:50002,rejectUnauthorized:false});
+          const fail=()=>process.exit(1);
+          s.setTimeout(4000,fail);
+          s.on('error',fail);
+          s.on('secureConnect',()=>s.write('{"id":1,"method":"server.version","params":["healthcheck","1.4"]}\n'));
+          s.on('data',d=>{try{const r=JSON.parse(d.toString().trim());process.exit(r.id===1&&r.result?0:1)}catch{fail()}});
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   nginx:
 
@@ -118,9 +138,12 @@ services:
     container_name: txc-nginx
     restart: unless-stopped
     depends_on:
-      - mempool-api
-      - indexer
-      - electrum
+      mempool-api:
+        condition: service_started
+      indexer:
+        condition: service_started
+      electrum:
+        condition: service_healthy
 
     ports:
       - "80:80"

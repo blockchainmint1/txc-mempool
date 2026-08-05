@@ -21,7 +21,7 @@ stream {
     # { server electrum:50002; }` only once at startup, so it keeps dialling a
     # dead IP after the shim container is recreated and connections hang. A
     # variable proxy_pass target is resolved per connection instead.
-    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver 127.0.0.11 valid=1s ipv6=off;
 
     # electrum1.texitcoin.org, electrum2..., electrum.texitcoin.org -> shim
     map $ssl_preread_server_name $txc_upstream {

@@ -79,7 +79,7 @@ stream = '''
 stream {
     # Docker's embedded DNS. Required: a proxy_pass variable target is resolved
     # per connection, so a recreated electrum container is picked up in ~10s.
-    resolver 127.0.0.11 valid=10s ipv6=off;
+    resolver 127.0.0.11 valid=1s ipv6=off;
 
     map $ssl_preread_server_name $txc_upstream {
         default        "127.0.0.1:8443";
