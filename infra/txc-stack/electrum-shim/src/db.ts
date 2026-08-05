@@ -79,9 +79,18 @@ export async function refreshScripthashMap(): Promise<{
   const startedAt = Date.now();
   const rows = idx
     .prepare(
+      // `balances` and `address_txs` only cover *confirmed* activity, and
+      // `outputs` covers everything the chain has ever paid. `mempool_address_txs`
+      // is what makes a brand-new wallet's first *incoming pending* payment
+      // resolvable — without it the receiving scripthash is unknown, so
+      // get_balance/get_history answer empty and the wallet balance never moves.
       `SELECT address FROM balances
        UNION
-       SELECT DISTINCT address FROM address_txs WHERE address IS NOT NULL`,
+       SELECT DISTINCT address FROM address_txs WHERE address IS NOT NULL
+       UNION
+       SELECT DISTINCT address FROM outputs WHERE address IS NOT NULL
+       UNION
+       SELECT DISTINCT address FROM mempool_address_txs WHERE address IS NOT NULL`,
     )
     .all() as { address: string }[];
   let added = 0;
@@ -107,6 +116,50 @@ export async function refreshScripthashMap(): Promise<{
   }).count;
   return { added, scanned: rows.length, total, ms: Date.now() - startedAt };
 }
+
+/**
+ * Map only the addresses touched by the current mempool. This is a handful of
+ * rows, so it can run every few seconds — it is what makes an incoming pending
+ * payment to a fresh address visible (and push a subscribe notification)
+ * without waiting for the full map pass.
+ */
+export function refreshMempoolScripthashes(): { added: number; scanned: number } {
+  const rows = idx
+    .prepare("SELECT DISTINCT address FROM mempool_address_txs WHERE address IS NOT NULL")
+    .all() as { address: string }[];
+  let added = 0;
+  const run = map.transaction((list: { address: string }[]) => {
+    for (const { address } of list) {
+      const sh = addressToScripthash(address);
+      if (!sh) continue;
+      if (insertSh.run(sh, address).changes) added++;
+    }
+  });
+  run(rows);
+  return { added, scanned: rows.length };
+}
+
+/**
+ * Map an explicit list of addresses (e.g. everything currently paying out in
+ * the mempool snapshot). Lets a first-ever incoming payment become resolvable
+ * within seconds instead of waiting for the indexer's mempool table.
+ */
+export function mapAddresses(addresses: Iterable<string>): number {
+  let added = 0;
+  const run = map.transaction((list: string[]) => {
+    for (const address of list) {
+      if (!address) continue;
+      const sh = addressToScripthash(address);
+      if (!sh) continue;
+      if (insertSh.run(sh, address).changes) added++;
+    }
+  });
+  run([...addresses]);
+  return added;
+}
+
+
+
 
 // ---- Address-level queries (the actual Electrum payloads) ----
 

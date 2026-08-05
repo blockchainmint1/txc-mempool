@@ -13,6 +13,7 @@ import {
   unconfirmedBalance,
 } from "./db.js";
 import { getFeeEstimate, getRelayFee } from "./fees.js";
+import { isSpentInMempool, pendingCredit, pendingUtxos } from "./mempool.js";
 import { historyStatus } from "./scripthash.js";
 import {
   getBlockCount,
@@ -68,10 +69,47 @@ export async function getTip(force = false): Promise<{ height: number; hex: stri
   return t;
 }
 
+/**
+ * History as the wallet must see it: confirmed rows from the indexer plus every
+ * pending transaction, including ones the indexer's mempool table has not
+ * picked up yet (it refreshes on its own slower timer).
+ */
+function historyFor(address: string): { tx_hash: string; height: number; fee?: number }[] {
+  const items = [...confirmedHistory(address), ...mempoolHistory(address)];
+  const seen = new Set(items.map((i) => i.tx_hash));
+  for (const u of pendingUtxos(address)) {
+    if (!seen.has(u.tx_hash)) {
+      seen.add(u.tx_hash);
+      items.push({ tx_hash: u.tx_hash, height: 0, fee: 0 });
+    }
+  }
+  return items;
+}
+
+/**
+ * Spendable set: confirmed UTXOs that no pending transaction has already
+ * consumed, plus unconfirmed outputs paying this address. iOS Electrum clients
+ * derive the displayed balance from this list, so omitting pending credits is
+ * what made an incoming payment show in history while the balance stayed put.
+ */
+function unspentFor(address: string) {
+  const confirmed = listUnspent(address).filter(
+    (u) => !isSpentInMempool(u.tx_hash, u.tx_pos),
+  );
+  const pendingList = pendingUtxos(address).filter(
+    (p) => !isSpentInMempool(p.tx_hash, p.tx_pos),
+  );
+  const seen = new Set(confirmed.map((u) => `${u.tx_hash}:${u.tx_pos}`));
+  return [
+    ...confirmed,
+    ...pendingList.filter((p) => !seen.has(`${p.tx_hash}:${p.tx_pos}`)),
+  ];
+}
+
 export function statusFor(scripthash: string): string | null {
   const address = addressFor(scripthash);
   if (!address) return null;
-  return historyStatus(fullHistory(address));
+  return historyStatus(historyFor(address));
 }
 
 export async function handle(method: string, params: unknown[]): Promise<unknown> {
@@ -163,25 +201,36 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
     case "blockchain.scripthash.get_balance": {
       const address = addressFor(String(params[0]));
       if (!address) return { confirmed: 0, unconfirmed: 0 };
+      const delta = unconfirmedBalance(address);
       return {
         confirmed: confirmedBalance(address),
-        unconfirmed: unconfirmedBalance(address),
+        // The indexer's pending delta lags its own mempool poll; fall back to
+        // the live snapshot so a just-received payment is reflected at once.
+        unconfirmed: delta !== 0 ? delta : pendingCredit(address),
       };
     }
     case "blockchain.scripthash.get_history": {
       const address = addressFor(String(params[0]));
       if (!address) return [];
-      return [...confirmedHistory(address), ...mempoolHistory(address)];
+      return historyFor(address);
     }
     case "blockchain.scripthash.get_mempool": {
       const address = addressFor(String(params[0]));
       if (!address) return [];
-      return mempoolHistory(address);
+      const rows = mempoolHistory(address);
+      const seen = new Set(rows.map((r) => r.tx_hash));
+      for (const u of pendingUtxos(address)) {
+        if (!seen.has(u.tx_hash)) {
+          seen.add(u.tx_hash);
+          rows.push({ tx_hash: u.tx_hash, height: 0, fee: 0 });
+        }
+      }
+      return rows;
     }
     case "blockchain.scripthash.listunspent": {
       const address = addressFor(String(params[0]));
       if (!address) return [];
-      return listUnspent(address);
+      return unspentFor(address);
     }
     case "blockchain.scripthash.subscribe":
       return statusFor(String(params[0]));
