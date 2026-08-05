@@ -201,6 +201,33 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
       const verbose = params[1] === true;
       return verbose ? await getRawTxVerbose(txid) : await getRawTxHex(txid);
     }
+    // Wallet extension method (Electrum forks): verbose tx, with each input
+    // enriched with the value/address it spends so the client can show fees
+    // and counterparties without a second round trip.
+    case "blockchain.transaction.get_detailed": {
+      const txid = String(params[0]);
+      const tx = (await getRawTxVerbose(txid)) as Record<string, any>;
+      const vin: any[] = Array.isArray(tx.vin) ? tx.vin : [];
+      await Promise.all(
+        vin.slice(0, 100).map(async (input) => {
+          if (!input || typeof input.txid !== "string") return; // coinbase
+          try {
+            const prev = (await getRawTxVerbose(input.txid)) as Record<string, any>;
+            const out = prev?.vout?.[input.vout];
+            if (!out) return;
+            input.value = out.value;
+            input.scriptPubKey = out.scriptPubKey;
+            const addr =
+              out.scriptPubKey?.address ?? out.scriptPubKey?.addresses?.[0];
+            if (addr) input.address = addr;
+          } catch {
+            // A missing/pruned parent must not fail the whole lookup.
+          }
+        }),
+      );
+      return tx;
+    }
+
     case "blockchain.transaction.broadcast": {
       const hex = String(params[0]);
       try {
