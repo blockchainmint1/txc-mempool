@@ -100,6 +100,7 @@ services:
       TLS_KEY: "/etc/letsencrypt/live/${ELECTRUM_DOMAIN:-$DOMAIN}/privkey.pem"
       TCP_PORT: "50001"
       TLS_PORT: "50002"
+      LOG_REQUESTS: "true"
     volumes:
       - ./data/indexer:/indexer:ro
       - ./data/electrum:/data
