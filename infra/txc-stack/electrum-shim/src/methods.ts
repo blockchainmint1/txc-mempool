@@ -12,9 +12,9 @@ import {
   scripthashToAddress,
   unconfirmedBalance,
 } from "./db.js";
+import { getFeeEstimate, getRelayFee } from "./fees.js";
 import { historyStatus } from "./scripthash.js";
 import {
-  estimateSmartFee,
   getBlockCount,
   getBlockHash,
   getBlockHeaderHex,
@@ -73,12 +73,6 @@ export function statusFor(scripthash: string): string | null {
   return historyStatus(fullHistory(address));
 }
 
-/** sat/kB -> TXC/kB, Electrum's estimatefee unit. */
-function toElectrumFee(txcPerKvB: number | undefined): number {
-  if (!txcPerKvB || !Number.isFinite(txcPerKvB) || txcPerKvB <= 0) return -1;
-  return Number(txcPerKvB.toFixed(8));
-}
-
 export async function handle(method: string, params: unknown[]): Promise<unknown> {
   switch (method) {
     // ---- server ----
@@ -131,19 +125,11 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
     // ---- fees ----
     case "blockchain.estimatefee": {
       const target = Math.max(1, Number(params[0]) || 1);
-      const est = await estimateSmartFee(target).catch(() => null);
-      const estimated = toElectrumFee(est?.feerate);
-      if (estimated > 0) return estimated;
-
-      // Sparse chains often cannot produce a statistical estimate. Returning
-      // Electrum's -1 sentinel leaves some legacy wallet fee UIs spinning, so
-      // use the node's live mempool/relay floor as a safe coin-per-kB fallback.
-      const info = await getMempoolInfo().catch(() => null);
-      return Math.max(info?.mempoolminfee ?? 0, info?.minrelaytxfee ?? 0, 0.00001);
+      // Cached/background-refreshed: never blocks the wallet on a slow node.
+      return await getFeeEstimate(target);
     }
     case "blockchain.relayfee": {
-      const info = await getMempoolInfo().catch(() => null);
-      return info?.minrelaytxfee ?? 0.00001;
+      return await getRelayFee();
     }
     case "mempool.get_fee_histogram": {
       const entries = await getRawMempoolVerbose().catch(() => ({}));
