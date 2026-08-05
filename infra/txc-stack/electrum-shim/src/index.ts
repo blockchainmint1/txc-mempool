@@ -27,6 +27,7 @@ const MAX_LINE = 2 * 1024 * 1024;
 interface Client {
   socket: net.Socket;
   buf: string;
+  transport: "tcp" | "tls";
   headersSub: boolean;
   scripthashSubs: Map<string, string | null>;
 }
@@ -61,6 +62,17 @@ async function handleOne(req: Record<string, unknown>, c: Client): Promise<unkno
   // Sends are rare and worth a line each; everything else is counted, not logged.
   if (LOG_REQUESTS || method === "blockchain.transaction.broadcast") {
     console.log(`[electrum] request ${method || "<missing>"}`);
+  }
+  // server.version is the first useful fingerprint sent by Electrum clients.
+  // Keep this one request visible even when per-call logging is disabled so a
+  // phone test can be distinguished from Docker's own "healthcheck" probe.
+  if (method === "server.version") {
+    const clientName = String(params[0] ?? "<unknown>").slice(0, 120);
+    const protocol = String(params[1] ?? "<unspecified>").slice(0, 40);
+    console.log(
+      `[electrum] handshake transport=${c.transport} peer=${peerLabel(c.socket)} ` +
+        `client=${JSON.stringify(clientName)} protocol=${JSON.stringify(protocol)}`,
+    );
   }
 
   try {
@@ -116,14 +128,23 @@ async function onLine(line: string, c: Client): Promise<void> {
   send(c, await handleOne(parsed as Record<string, unknown>, c));
 }
 
-function attach(socket: net.Socket): void {
+function attach(socket: net.Socket, transport: "tcp" | "tls"): void {
   socket.setNoDelay(true);
   socket.setKeepAlive(true, 30_000);
-  const c: Client = { socket, buf: "", headersSub: false, scripthashSubs: new Map() };
+  const c: Client = {
+    socket,
+    buf: "",
+    transport,
+    headersSub: false,
+    scripthashSubs: new Map(),
+  };
   clients.add(c);
 
   if (LOG_CONNECTIONS) {
-    console.log(`[electrum] client connected (${clients.size} active)`);
+    console.log(
+      `[electrum] client connected transport=${transport} peer=${peerLabel(socket)} ` +
+        `(${clients.size} active)`,
+    );
   }
 
   socket.on("data", (chunk) => {
@@ -232,7 +253,7 @@ function start(): void {
   startFeeWarmer();
   startMempoolWatcher();
 
-  net.createServer(attach).listen(TCP_PORT, () =>
+  net.createServer((socket) => attach(socket, "tcp")).listen(TCP_PORT, () =>
     console.log(`[electrum] TCP listening on ${TCP_PORT}`),
   );
 
@@ -244,7 +265,7 @@ function start(): void {
           key: fs.readFileSync(TLS_KEY),
           minVersion: "TLSv1.2",
         },
-        attach,
+        (socket) => attach(socket, "tls"),
       );
     // The secure-connection callback above runs only after a successful TLS
     // handshake. Log the underlying TCP arrival and handshake failures too so
