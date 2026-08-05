@@ -14,6 +14,7 @@ const TLS_CERT = process.env.TLS_CERT ?? "";
 const TLS_KEY = process.env.TLS_KEY ?? "";
 const TIP_POLL_MS = Number(process.env.TIP_POLL_MS ?? 5000);
 const MAP_REFRESH_MS = Number(process.env.MAP_REFRESH_MS ?? 60_000);
+const LOG_REQUESTS = process.env.LOG_REQUESTS === "true";
 const MAX_LINE = 2 * 1024 * 1024;
 
 interface Client {
@@ -34,6 +35,10 @@ async function handleOne(req: Record<string, unknown>, c: Client): Promise<unkno
   const id = req.id ?? null;
   const method = String(req.method ?? "");
   const params = Array.isArray(req.params) ? req.params : [];
+
+  if (LOG_REQUESTS) {
+    console.log(`[electrum] request ${method || "<missing>"}`);
+  }
 
   try {
     if (method === "blockchain.headers.subscribe") c.headersSub = true;
@@ -84,6 +89,10 @@ function attach(socket: net.Socket): void {
   const c: Client = { socket, buf: "", headersSub: false, scripthashSubs: new Map() };
   clients.add(c);
 
+  if (LOG_REQUESTS) {
+    console.log(`[electrum] client connected (${clients.size} active)`);
+  }
+
   socket.on("data", (chunk) => {
     c.buf += chunk.toString("utf8");
     if (c.buf.length > MAX_LINE) {
@@ -98,7 +107,12 @@ function attach(socket: net.Socket): void {
     }
   });
   socket.on("error", () => socket.destroy());
-  socket.on("close", () => clients.delete(c));
+  socket.on("close", () => {
+    clients.delete(c);
+    if (LOG_REQUESTS) {
+      console.log(`[electrum] client disconnected (${clients.size} active)`);
+    }
+  });
 }
 
 let lastTipHeight = -1;
