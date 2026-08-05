@@ -70,7 +70,12 @@ export function scripthashToAddress(scripthash: string): string | null {
  * scripthash entry. Cheap after the first pass because the insert is
  * INSERT OR IGNORE against a primary key.
  */
-export function refreshScripthashMap(): { added: number; scanned: number; total: number; ms: number } {
+export async function refreshScripthashMap(): Promise<{
+  added: number;
+  scanned: number;
+  total: number;
+  ms: number;
+}> {
   const startedAt = Date.now();
   const rows = idx
     .prepare(
@@ -80,7 +85,7 @@ export function refreshScripthashMap(): { added: number; scanned: number; total:
     )
     .all() as { address: string }[];
   let added = 0;
-  const tx = map.transaction((list: { address: string }[]) => {
+  const insertBatch = map.transaction((list: { address: string }[]) => {
     for (const { address } of list) {
       if (!address) continue;
       const sh = addressToScripthash(address);
@@ -89,7 +94,14 @@ export function refreshScripthashMap(): { added: number; scanned: number; total:
       if (res.changes) added++;
     }
   });
-  tx(rows);
+  // better-sqlite3 and address hashing are synchronous. Processing the entire
+  // chain's address set in one transaction blocks Electrum socket responses,
+  // so yield to the event loop between bounded batches.
+  const batchSize = 500;
+  for (let offset = 0; offset < rows.length; offset += batchSize) {
+    insertBatch(rows.slice(offset, offset + batchSize));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
   const total = (map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
     count: number;
   }).count;

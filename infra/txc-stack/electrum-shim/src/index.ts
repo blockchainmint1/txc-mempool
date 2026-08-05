@@ -28,6 +28,8 @@ const clients = new Set<Client>();
 let requestCount = 0;
 let errorCount = 0;
 let slowRequestCount = 0;
+let mapRefreshRunning = false;
+let lastMapStats = { scanned: 0, total: 0, ms: 0 };
 
 function send(c: Client, payload: unknown): void {
   if (c.socket.destroyed) return;
@@ -162,6 +164,25 @@ async function pollTip(): Promise<void> {
   }
 }
 
+async function refreshMap(label: "warm" | "refresh"): Promise<void> {
+  if (mapRefreshRunning) return;
+  mapRefreshRunning = true;
+  try {
+    const refreshed = await refreshScripthashMap();
+    lastMapStats = refreshed;
+    if (label === "warm" || refreshed.added > 0 || refreshed.ms >= 1_000) {
+      console.log(
+        `[electrum] scripthash map ${label}: ${refreshed.total} mapped, ` +
+          `+${refreshed.added} new, ${refreshed.scanned} scanned in ${refreshed.ms}ms`,
+      );
+    }
+  } catch (e) {
+    console.error("[electrum] map refresh failed:", (e as Error).message);
+  } finally {
+    mapRefreshRunning = false;
+  }
+}
+
 function start(): void {
   net.createServer(attach).listen(TCP_PORT, () =>
     console.log(`[electrum] TCP listening on ${TCP_PORT}`),
@@ -182,24 +203,9 @@ function start(): void {
     console.warn("[electrum] TLS_CERT/TLS_KEY missing — TLS listener disabled");
   }
 
-  const warm = refreshScripthashMap();
-  console.log(
-    `[electrum] scripthash map warm: ${warm.total} mapped, +${warm.added} new, ` +
-      `${warm.scanned} indexed addresses scanned in ${warm.ms}ms`,
-  );
-  setInterval(() => {
-    try {
-      const refreshed = refreshScripthashMap();
-      if (refreshed.added > 0 || refreshed.ms >= 1_000) {
-        console.log(
-          `[electrum] scripthash map refresh: ${refreshed.total} mapped, ` +
-            `+${refreshed.added} new in ${refreshed.ms}ms`,
-        );
-      }
-    } catch (e) {
-      console.error("[electrum] map refresh failed:", (e as Error).message);
-    }
-  }, MAP_REFRESH_MS);
+  // Start serving first; build the map in yielding batches immediately after.
+  setImmediate(() => void refreshMap("warm"));
+  setInterval(() => void refreshMap("refresh"), MAP_REFRESH_MS);
   setInterval(() => {
     try {
       const stats = indexStats();
@@ -207,6 +213,7 @@ function start(): void {
       console.log(
         `[electrum] health: index=${stats.indexerTip}, node=${lastTipHeight}, lag=${lag} blocks, ` +
           `addresses=${stats.indexedAddresses}, mapped=${stats.mappedScripthashes}, ` +
+          `map_refresh=${mapRefreshRunning ? "running" : "idle"}, map_ms=${lastMapStats.ms}, ` +
           `txs=${stats.indexedTransactions}, clients=${clients.size}, requests=${requestCount}, ` +
           `errors=${errorCount}, slow=${slowRequestCount}`,
       );
