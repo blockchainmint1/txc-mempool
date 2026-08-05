@@ -29,6 +29,13 @@ STAMP=$(date +%Y%m%d-%H%M%S)
 cp "$CONF" "$CONF.bak-$STAMP"
 echo "Backup: $CONF.bak-$STAMP"
 
+# The HTTPS vhost must NOT listen on 443 — the stream{} SNI router owns it.
+# If both listen on 443, TLS handshakes are answered by whichever listener wins
+# the race, so wallet/API connections fail intermittently.
+sed -i -E 's/listen[[:space:]]+443([[:space:]]|;)/listen 127.0.0.1:8443\1/g; s/listen[[:space:]]+\[::\]:443([[:space:]]|;)/listen 127.0.0.1:8443\1/g' "$CONF"
+sed -i -E '/^stream/,$ s/listen 127\.0\.0\.1:8443;/listen 443;/' "$CONF"
+echo "HTTPS vhost listener(s):"; grep -nE 'listen .*8443' "$CONF" || true
+
 python3 - "$CONF" <<'PY'
 import re, sys
 
