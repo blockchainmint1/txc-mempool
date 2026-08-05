@@ -19,7 +19,6 @@ import {
   getBlockHash,
   getBlockHeaderHex,
   getBlockVerbose1,
-  getMempoolInfo,
   getRawMempoolVerbose,
   getRawTxHex,
   getRawTxVerbose,
