@@ -100,7 +100,11 @@ services:
       TLS_KEY: "/etc/letsencrypt/live/${ELECTRUM_DOMAIN:-$DOMAIN}/privkey.pem"
       TCP_PORT: "50001"
       TLS_PORT: "50002"
-      LOG_REQUESTS: "true"
+      # Per-call logging floods the log on a live wallet (an HD scan is hundreds
+      # of get_balance calls). Counts are reported in the 60s health line
+      # instead; flip to "true" only while debugging a specific client.
+      LOG_REQUESTS: "false"
+
     volumes:
       - ./data/indexer:/indexer:ro
       - ./data/electrum:/data
