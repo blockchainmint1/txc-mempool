@@ -166,24 +166,16 @@ docker compose stop nginx
 docker compose start nginx
 ```
 
-Point the shim at the new cert. Edit `/opt/txc-stack/docker-compose.yml`:
+Point the shim at the new cert. Instead of hand-editing compose, add one line to
+`.env` (compose now reads `ELECTRUM_DOMAIN` and falls back to `DOMAIN`):
 
 ```bash
-nano /opt/txc-stack/docker-compose.yml
-```
-
-In the `electrum:` service change the two TLS lines to:
-
-```yaml
-      TLS_CERT: "/etc/letsencrypt/live/electrum.texitcoin.org/fullchain.pem"
-      TLS_KEY: "/etc/letsencrypt/live/electrum.texitcoin.org/privkey.pem"
-```
-
-Save (Ctrl+O, Enter, Ctrl+X), then:
-
-```bash
+cd /opt/txc-stack
+grep -q '^ELECTRUM_DOMAIN=' .env || echo 'ELECTRUM_DOMAIN=electrum.texitcoin.org' >> .env
 docker compose up -d --force-recreate electrum
+docker compose logs --tail=20 electrum
 ```
+
 
 Verify from **your laptop**:
 
