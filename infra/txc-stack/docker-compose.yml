@@ -96,8 +96,8 @@ services:
       RPC_PASSWORD: "${RPC_PASSWORD}"
       INDEXER_DB_PATH: "/indexer/indexer.sqlite"
       MAP_DB_PATH: "/data/scripthash.sqlite"
-      TLS_CERT: "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
-      TLS_KEY: "/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
+      TLS_CERT: "/etc/letsencrypt/live/${ELECTRUM_DOMAIN:-$DOMAIN}/fullchain.pem"
+      TLS_KEY: "/etc/letsencrypt/live/${ELECTRUM_DOMAIN:-$DOMAIN}/privkey.pem"
       TCP_PORT: "50001"
       TLS_PORT: "50002"
     volumes:
