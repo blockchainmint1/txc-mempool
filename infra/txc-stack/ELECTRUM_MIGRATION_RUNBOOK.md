@@ -40,30 +40,50 @@ Manager). Then become root:
 sudo -i
 ```
 
-Then:
+You now have two directories on the box, and they are **not** the same thing:
 
-```bash
-cd /opt/txc-stack
-```
+- `/opt/txc-mempool` — the git clone of the project. Read-only source of truth.
+- `/opt/txc-stack` — the **live running stack** (`docker-compose.yml`, `.env`,
+  `nginx/`, the indexer database). This is what Docker actually runs.
+
+So the pattern for every update is: `git pull` in the clone, then copy the
+changed files across into the live stack.
 
 ---
 
-## Step 1 — pull the new service onto the box
+## Step 1 — get the new service into the live stack
 
-If the box has the repo, just update it:
-
-```bash
-cd /opt/txc-stack && git pull
-```
-
-If it doesn't (you've been copying files up), from **your laptop** in the
-project folder:
+Pull the latest code:
 
 ```bash
-scp -r infra/txc-stack/electrum-shim root@98.85.45.100:/opt/txc-stack/
-scp infra/txc-stack/docker-compose.yml root@98.85.45.100:/opt/txc-stack/
-scp infra/txc-stack/nginx/stream-sni.conf.example root@98.85.45.100:/opt/txc-stack/nginx/
+cd /opt/txc-mempool && git pull
 ```
+
+Copy the Electrum pieces into the live stack:
+
+```bash
+cp -r /opt/txc-mempool/infra/txc-stack/electrum-shim /opt/txc-stack/
+cp /opt/txc-mempool/infra/txc-stack/nginx/stream-sni.conf.example /opt/txc-stack/nginx/
+```
+
+Your live `docker-compose.yml` has hand-edits (cert paths, ports), so do **not**
+blindly overwrite it. Back it up, then copy the new one and re-check it:
+
+```bash
+cp /opt/txc-stack/docker-compose.yml /opt/txc-stack/docker-compose.yml.bak-$(date +%Y%m%d)
+diff /opt/txc-stack/docker-compose.yml /opt/txc-mempool/infra/txc-stack/docker-compose.yml
+```
+
+If the diff only shows the new `electrum:` service being added, it is safe:
+
+```bash
+cp /opt/txc-mempool/infra/txc-stack/docker-compose.yml /opt/txc-stack/docker-compose.yml
+cd /opt/txc-stack && docker compose config >/dev/null && echo "compose OK"
+```
+
+If the diff shows your own edits would be lost, paste the diff to me instead and
+I'll tell you exactly which lines to add by hand.
+
 
 ---
 
