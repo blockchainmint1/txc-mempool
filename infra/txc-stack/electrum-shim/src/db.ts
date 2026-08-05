@@ -25,6 +25,41 @@ const insertSh = map.prepare(
 );
 const selectAddr = map.prepare("SELECT address FROM scripthashes WHERE scripthash = ?");
 
+export interface IndexStats {
+  indexerTip: number;
+  indexedBlocks: number;
+  indexedTransactions: number;
+  indexedAddresses: number;
+  mappedScripthashes: number;
+}
+
+export function indexStats(): IndexStats {
+  const index = idx
+    .prepare(
+      `SELECT
+         COALESCE(MAX(height), -1) AS indexerTip,
+         COUNT(*) AS indexedBlocks
+       FROM blocks`,
+    )
+    .get() as { indexerTip: number; indexedBlocks: number };
+  const txs = idx.prepare("SELECT COUNT(DISTINCT txid) AS count FROM address_txs").get() as {
+    count: number;
+  };
+  const addresses = idx
+    .prepare("SELECT COUNT(DISTINCT address) AS count FROM address_txs")
+    .get() as { count: number };
+  const mapped = map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
+    count: number;
+  };
+  return {
+    indexerTip: index.indexerTip,
+    indexedBlocks: index.indexedBlocks,
+    indexedTransactions: txs.count,
+    indexedAddresses: addresses.count,
+    mappedScripthashes: mapped.count,
+  };
+}
+
 export function scripthashToAddress(scripthash: string): string | null {
   const row = selectAddr.get(scripthash.toLowerCase()) as { address: string } | undefined;
   return row?.address ?? null;
@@ -35,7 +70,8 @@ export function scripthashToAddress(scripthash: string): string | null {
  * scripthash entry. Cheap after the first pass because the insert is
  * INSERT OR IGNORE against a primary key.
  */
-export function refreshScripthashMap(): number {
+export function refreshScripthashMap(): { added: number; scanned: number; total: number; ms: number } {
+  const startedAt = Date.now();
   const rows = idx
     .prepare(
       `SELECT address FROM balances
@@ -54,7 +90,10 @@ export function refreshScripthashMap(): number {
     }
   });
   tx(rows);
-  return added;
+  const total = (map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
+    count: number;
+  }).count;
+  return { added, scanned: rows.length, total, ms: Date.now() - startedAt };
 }
 
 // ---- Address-level queries (the actual Electrum payloads) ----
