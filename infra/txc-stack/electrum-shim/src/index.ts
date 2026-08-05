@@ -168,7 +168,12 @@ async function refreshMap(label: "warm" | "refresh"): Promise<void> {
   if (mapRefreshRunning) return;
   mapRefreshRunning = true;
   try {
-    const refreshed = await refreshScripthashMap();
+    // Tolerate older db.ts builds that returned a plain count.
+    const raw = (await refreshScripthashMap()) as unknown;
+    const refreshed =
+      typeof raw === "number"
+        ? { added: raw, scanned: raw, total: raw, ms: 0 }
+        : (raw as { added: number; scanned: number; total: number; ms: number });
     lastMapStats = refreshed;
     if (label === "warm" || refreshed.added > 0 || refreshed.ms >= 1_000) {
       console.log(
