@@ -23,6 +23,8 @@ import {
   getRawTxHex,
   getRawTxVerbose,
   sendRawTx,
+  getRawMempoolTxids,
+  decodeRawTx,
 } from "./rpc.js";
 
 export const SERVER_VERSION = "TxcElectrumShim 1.0";
@@ -224,10 +226,14 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
       try {
         return await sendRawTx(hex);
       } catch (e) {
+        const raw = (e as Error).message || "broadcast failed";
+        const friendly = await explainBroadcastFailure(hex, raw);
+        if (friendly.txid) return friendly.txid; // already accepted — treat as success
         // Electrum clients surface this string to the user verbatim.
-        throw new RpcFault(1, (e as Error).message || "broadcast failed");
+        throw new RpcFault(1, friendly.message);
       }
     }
+
     case "blockchain.transaction.id_from_pos": {
       const height = Number(params[0]);
       const pos = Number(params[1]);
@@ -246,4 +252,80 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
       return { ...indexStats(), indexer_tip: indexerTipHeight(), node_tip: (await getTip()).height };
   }
   throw new RpcFault(-32601, `unknown method "${method}"`);
+}
+
+/**
+ * Turn a raw texitcoind broadcast rejection into something a wallet user can act
+ * on — and detect the cases that aren't really failures at all.
+ *
+ * `txn-mempool-conflict` means another *pending* transaction already spends one
+ * of the same coins. That usually happens when a wallet retries a send after a
+ * timeout, or when two devices share a seed. If the conflict is literally our
+ * own transaction, the send already succeeded and we return its txid.
+ */
+async function explainBroadcastFailure(
+  hex: string,
+  raw: string,
+): Promise<{ txid?: string; message: string }> {
+  let decoded: { txid: string; vin: { txid?: string; vout?: number }[] } | null = null;
+  try {
+    decoded = await decodeRawTx(hex);
+  } catch {
+    decoded = null;
+  }
+
+  const alreadyKnown = /already[- ]?in[- ]?mempool|txn-already-known|already in block chain|txn-already-in-mempool/i;
+  if (decoded && alreadyKnown.test(raw)) return { txid: decoded.txid, message: raw };
+
+  if (decoded && /txn-mempool-conflict|insufficient fee|txn-already/i.test(raw)) {
+    // Is our exact transaction already known to the node? Then it went through.
+    try {
+      await getRawTxVerbose(decoded.txid);
+      return { txid: decoded.txid, message: raw };
+    } catch {
+      /* not known — a genuine conflict */
+    }
+  }
+
+  if (/txn-mempool-conflict/i.test(raw)) {
+    const conflict = decoded ? await findConflictingMempoolTx(decoded) : null;
+    const suffix = conflict ? ` (pending transaction ${conflict})` : "";
+    return {
+      message:
+        "Those coins are already being spent by an unconfirmed transaction" +
+        suffix +
+        ". Wait for it to confirm — about a block — then send again.",
+    };
+  }
+
+  return { message: raw };
+}
+
+/** Find the mempool transaction spending one of our inputs, if we can. */
+async function findConflictingMempoolTx(decoded: {
+  vin: { txid?: string; vout?: number }[];
+}): Promise<string | null> {
+  const wanted = new Set(
+    decoded.vin.filter((i) => i.txid).map((i) => `${i.txid}:${i.vout ?? 0}`),
+  );
+  if (wanted.size === 0) return null;
+  try {
+    const txids = await getRawMempoolTxids();
+    // Our mempool is tiny; cap the scan so a flood can never stall a send.
+    for (const txid of txids.slice(0, 200)) {
+      let tx: Record<string, unknown>;
+      try {
+        tx = await getRawTxVerbose(txid);
+      } catch {
+        continue;
+      }
+      const vin = (tx.vin as { txid?: string; vout?: number }[] | undefined) ?? [];
+      for (const i of vin) {
+        if (i.txid && wanted.has(`${i.txid}:${i.vout ?? 0}`)) return txid;
+      }
+    }
+  } catch {
+    /* mempool unavailable — the generic message still helps */
+  }
+  return null;
 }
