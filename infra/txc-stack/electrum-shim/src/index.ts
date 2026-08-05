@@ -162,6 +162,12 @@ function attach(socket: net.Socket): void {
   });
 }
 
+function peerLabel(socket: net.Socket): string {
+  const address = socket.remoteAddress ?? "unknown";
+  const port = socket.remotePort ?? 0;
+  return `${address}:${port}`;
+}
+
 let lastTipHeight = -1;
 
 async function pollTip(): Promise<void> {
@@ -231,7 +237,7 @@ function start(): void {
   );
 
   if (TLS_CERT && TLS_KEY && fs.existsSync(TLS_CERT) && fs.existsSync(TLS_KEY)) {
-    tls
+    const tlsServer = tls
       .createServer(
         {
           cert: fs.readFileSync(TLS_CERT),
@@ -239,8 +245,23 @@ function start(): void {
           minVersion: "TLSv1.2",
         },
         attach,
-      )
-      .listen(TLS_PORT, () => console.log(`[electrum] TLS listening on ${TLS_PORT}`));
+      );
+    // The secure-connection callback above runs only after a successful TLS
+    // handshake. Log the underlying TCP arrival and handshake failures too so
+    // an iOS trust/ATS failure is distinguishable from DNS or firewall trouble.
+    tlsServer.on("connection", (socket) => {
+      if (LOG_CONNECTIONS) {
+        console.log(`[electrum] TLS TCP arrival from ${peerLabel(socket)}`);
+      }
+    });
+    tlsServer.on("tlsClientError", (error, socket) => {
+      console.warn(
+        `[electrum] TLS handshake failed from ${peerLabel(socket)}: ${error.message}`,
+      );
+    });
+    tlsServer.listen(TLS_PORT, () =>
+      console.log(`[electrum] TLS listening on ${TLS_PORT}`),
+    );
   } else {
     console.warn("[electrum] TLS_CERT/TLS_KEY missing — TLS listener disabled");
   }
