@@ -132,8 +132,9 @@ services:
           s.on('data',d=>{try{const r=JSON.parse(d.toString().trim());process.exit(r.id===1&&r.result?0:1)}catch{fail()}});
       interval: 5s
       timeout: 5s
-      retries: 12
-      start_period: 10s
+      retries: 24
+      start_period: 60s
+
 
   nginx:
 
