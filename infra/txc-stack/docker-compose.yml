@@ -69,7 +69,8 @@ services:
       RPC_PASSWORD: "${RPC_PASSWORD}"
       DB_PATH: "/data/indexer.sqlite"
       HTTP_PORT: "3001"
-      POLL_MS: "5000"
+      # 30s, not 5s: keeps texitcoind's RPC work queue from saturating.
+      POLL_MS: "30000"
       MEMPOOL_REFRESH_MS: "15000"
     volumes:
       - ./data/indexer:/data
