@@ -292,6 +292,32 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
       return txid;
     }
 
+    // SPV proof. BlueWallet-derived clients call this while verifying confirmed
+    // history; without it the wallet refresh aborts mid-scan.
+    case "blockchain.transaction.get_merkle": {
+      const txid = String(params[0] ?? "");
+      if (!/^[0-9a-fA-F]{64}$/.test(txid)) throw new RpcFault(1, "invalid txid");
+
+      let height = Number(params[1]);
+      if (!Number.isFinite(height) || height <= 0) {
+        // Height is optional in practice — resolve it from the node.
+        const verbose = await getRawTxVerbose(txid);
+        const blockhash = verbose["blockhash"];
+        if (typeof blockhash !== "string") {
+          throw new RpcFault(1, "transaction is not confirmed yet");
+        }
+        height = Number((await getBlockVerbose1(blockhash)).height);
+      }
+
+      const block = await getBlockVerbose1(await getBlockHash(height));
+      const pos = block.tx.indexOf(txid.toLowerCase());
+      if (pos < 0) throw new RpcFault(1, "transaction not in block at that height");
+
+      return { block_height: height, pos, merkle: merkleBranch(block.tx, pos) };
+    }
+
+
+
     // ---- misc ----
     case "blockchain.numblocks.subscribe":
       return (await getTip()).height;
