@@ -193,7 +193,12 @@ it backs up nginx.conf, moves the HTTPS vhost to 8443, adds the SNI router on
 
 ```bash
 cd /opt/txc-mempool && git pull
-bash /opt/txc-mempool/infra/txc-stack/nginx/apply-sni-443.sh
+cp -r /opt/txc-mempool/infra/txc-stack/electrum-shim /opt/txc-stack/
+cp /opt/txc-mempool/infra/txc-stack/nginx/nginx.conf /opt/txc-stack/nginx/nginx.conf
+cd /opt/txc-stack
+docker compose config >/dev/null && echo "compose OK"
+docker compose build --no-cache electrum
+docker compose up -d --force-recreate electrum nginx
 ```
 
 Verify from your laptop afterwards:
