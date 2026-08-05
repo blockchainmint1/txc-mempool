@@ -30,7 +30,23 @@ interface Client {
   transport: "tcp" | "tls";
   headersSub: boolean;
   scripthashSubs: Map<string, string | null>;
+  /** Client name from server.version, e.g. "TXC Wallet" or "healthcheck". */
+  name?: string;
 }
+
+/** Docker's own probe — never worth tracing. */
+function isProbe(c: Client): boolean {
+  return c.name === "healthcheck";
+}
+
+function summarize(result: unknown): string {
+  if (result === null || result === undefined) return String(result);
+  if (Array.isArray(result)) return `array(${result.length})`;
+  if (typeof result === "object") return `object(${Object.keys(result as object).length} keys)`;
+  const s = String(result);
+  return s.length > 60 ? `${s.slice(0, 60)}…` : s;
+}
+
 
 const clients = new Set<Client>();
 let requestCount = 0;
