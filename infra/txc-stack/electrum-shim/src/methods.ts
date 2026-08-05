@@ -5,6 +5,7 @@ import {
   confirmedBalance,
   confirmedHistory,
   fullHistory,
+  indexStats,
   indexerTipHeight,
   listUnspent,
   mempoolHistory,
@@ -257,7 +258,7 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
     case "server.add_peer":
       return false;
     case "blockchain.indexer.status":
-      return { indexer_tip: indexerTipHeight(), node_tip: (await getTip()).height };
+      return { ...indexStats(), indexer_tip: indexerTipHeight(), node_tip: (await getTip()).height };
   }
   throw new RpcFault(-32601, `unknown method "${method}"`);
 }

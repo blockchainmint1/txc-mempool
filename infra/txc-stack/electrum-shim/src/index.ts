@@ -6,7 +6,7 @@ import net from "node:net";
 import tls from "node:tls";
 import fs from "node:fs";
 import { handle, RpcFault, getTip, statusFor } from "./methods.js";
-import { refreshScripthashMap } from "./db.js";
+import { indexStats, refreshScripthashMap } from "./db.js";
 
 const TCP_PORT = Number(process.env.TCP_PORT ?? 50001);
 const TLS_PORT = Number(process.env.TLS_PORT ?? 50002);
@@ -25,6 +25,11 @@ interface Client {
 }
 
 const clients = new Set<Client>();
+let requestCount = 0;
+let errorCount = 0;
+let slowRequestCount = 0;
+let mapRefreshRunning = false;
+let lastMapStats = { scanned: 0, total: 0, ms: 0 };
 
 function send(c: Client, payload: unknown): void {
   if (c.socket.destroyed) return;
@@ -32,9 +37,11 @@ function send(c: Client, payload: unknown): void {
 }
 
 async function handleOne(req: Record<string, unknown>, c: Client): Promise<unknown> {
+  const startedAt = Date.now();
   const id = req.id ?? null;
   const method = String(req.method ?? "");
   const params = Array.isArray(req.params) ? req.params : [];
+  requestCount++;
 
   if (LOG_REQUESTS) {
     console.log(`[electrum] request ${method || "<missing>"}`);
@@ -53,8 +60,14 @@ async function handleOne(req: Record<string, unknown>, c: Client): Promise<unkno
       return { jsonrpc: "2.0", id, result: true };
     }
     const result = await handle(method, params);
+    const elapsed = Date.now() - startedAt;
+    if (elapsed >= 1_000) {
+      slowRequestCount++;
+      console.warn(`[electrum] slow request ${method} ${elapsed}ms`);
+    }
     return { jsonrpc: "2.0", id, result };
   } catch (e) {
+    errorCount++;
     const fault = e instanceof RpcFault ? e : new RpcFault(1, (e as Error).message);
     console.error(`[electrum] ${method} failed:`, fault.message);
     return { jsonrpc: "2.0", id, error: { code: fault.code, message: fault.message } };
@@ -151,6 +164,25 @@ async function pollTip(): Promise<void> {
   }
 }
 
+async function refreshMap(label: "warm" | "refresh"): Promise<void> {
+  if (mapRefreshRunning) return;
+  mapRefreshRunning = true;
+  try {
+    const refreshed = await refreshScripthashMap();
+    lastMapStats = refreshed;
+    if (label === "warm" || refreshed.added > 0 || refreshed.ms >= 1_000) {
+      console.log(
+        `[electrum] scripthash map ${label}: ${refreshed.total} mapped, ` +
+          `+${refreshed.added} new, ${refreshed.scanned} scanned in ${refreshed.ms}ms`,
+      );
+    }
+  } catch (e) {
+    console.error("[electrum] map refresh failed:", (e as Error).message);
+  } finally {
+    mapRefreshRunning = false;
+  }
+}
+
 function start(): void {
   net.createServer(attach).listen(TCP_PORT, () =>
     console.log(`[electrum] TCP listening on ${TCP_PORT}`),
@@ -171,15 +203,24 @@ function start(): void {
     console.warn("[electrum] TLS_CERT/TLS_KEY missing — TLS listener disabled");
   }
 
-  const added = refreshScripthashMap();
-  console.log(`[electrum] scripthash map warm: +${added} entries`);
+  // Start serving first; build the map in yielding batches immediately after.
+  setImmediate(() => void refreshMap("warm"));
+  setInterval(() => void refreshMap("refresh"), MAP_REFRESH_MS);
   setInterval(() => {
     try {
-      refreshScripthashMap();
+      const stats = indexStats();
+      const lag = lastTipHeight < 0 ? "unknown" : String(Math.max(0, lastTipHeight - stats.indexerTip));
+      console.log(
+        `[electrum] health: index=${stats.indexerTip}, node=${lastTipHeight}, lag=${lag} blocks, ` +
+          `addresses=${stats.indexedAddresses}, mapped=${stats.mappedScripthashes}, ` +
+          `map_refresh=${mapRefreshRunning ? "running" : "idle"}, map_ms=${lastMapStats.ms}, ` +
+          `txs=${stats.indexedTransactions}, clients=${clients.size}, requests=${requestCount}, ` +
+          `errors=${errorCount}, slow=${slowRequestCount}`,
+      );
     } catch (e) {
-      console.error("[electrum] map refresh failed:", (e as Error).message);
+      console.error("[electrum] health check failed:", (e as Error).message);
     }
-  }, MAP_REFRESH_MS);
+  }, 60_000);
   setInterval(() => void pollTip(), TIP_POLL_MS);
   void pollTip();
 }
