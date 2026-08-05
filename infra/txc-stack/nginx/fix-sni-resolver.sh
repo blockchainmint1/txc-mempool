@@ -107,7 +107,9 @@ grep -n -A 22 '^stream {' "$CONF"
 
 cd "$STACK"
 echo "=== validating ==="
-if docker compose exec -T nginx sh -c "envsubst '\$DOMAIN' < /etc/nginx/nginx.conf > /tmp/nginx.test.conf && nginx -t -c /tmp/nginx.test.conf" 2>&1 | tee /tmp/nginx-test.out | grep -q 'test is successful'; then
+# Use a disposable container because the live nginx container may currently be
+# crash-looping and therefore unavailable to `docker compose exec`.
+if docker compose run --rm --no-deps --entrypoint sh nginx -c "envsubst '\$DOMAIN' < /etc/nginx/nginx.conf > /tmp/nginx.test.conf && nginx -t -c /tmp/nginx.test.conf" 2>&1 | tee /tmp/nginx-test.out | grep -q 'test is successful'; then
   docker compose up -d --force-recreate nginx
   echo "OK: nginx recreated. electrum:50002 is now resolved per connection."
 else
@@ -116,7 +118,7 @@ else
   BADLINE=$(grep -oE 'nginx.test.conf:[0-9]+' /tmp/nginx-test.out | head -1 | cut -d: -f2 || true)
   if [ -n "${BADLINE:-}" ]; then
     echo "--- offending region (lines $((BADLINE-6))-$((BADLINE+6))) ---"
-    docker compose exec -T nginx sh -c "sed -n '$((BADLINE-6)),$((BADLINE+6))p' /tmp/nginx.test.conf" || true
+    sed -n "$((BADLINE-6)),$((BADLINE+6))p" "$CONF" || true
   fi
   echo "FAILED validation — restoring backup, nothing changed."
   cp "$CONF.bak-$STAMP" "$CONF"
