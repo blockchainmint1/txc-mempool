@@ -46,9 +46,10 @@ stream {
     resolver 127.0.0.11 valid=10s ipv6=off;
 
     map $ssl_preread_server_name $txc_upstream {
-        ~^electrum   electrum:50002;
-        default      127.0.0.1:8443;
+        default        "127.0.0.1:8443";
+        "~^electrum"   "electrum:50002";
     }
+
 
     server {
         listen 443;
