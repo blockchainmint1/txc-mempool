@@ -8,6 +8,7 @@ import fs from "node:fs";
 import { handle, RpcFault, getTip, statusFor } from "./methods.js";
 import { indexStats, refreshScripthashMap } from "./db.js";
 import { startFeeWarmer } from "./fees.js";
+import { mempoolSnapshotStats, startMempoolWatcher } from "./mempool.js";
 
 const TCP_PORT = Number(process.env.TCP_PORT ?? 50001);
 const TLS_PORT = Number(process.env.TLS_PORT ?? 50002);
@@ -198,6 +199,7 @@ async function refreshMap(label: "warm" | "refresh"): Promise<void> {
 
 function start(): void {
   startFeeWarmer();
+  startMempoolWatcher();
 
   net.createServer(attach).listen(TCP_PORT, () =>
     console.log(`[electrum] TCP listening on ${TCP_PORT}`),
@@ -230,7 +232,8 @@ function start(): void {
           `addresses=${stats.indexedAddresses}, mapped=${stats.mappedScripthashes}, ` +
           `map_refresh=${mapRefreshRunning ? "running" : "idle"}, map_ms=${lastMapStats.ms}, ` +
           `txs=${stats.indexedTransactions}, clients=${clients.size}, requests=${requestCount}, ` +
-          `errors=${errorCount}, slow=${slowRequestCount}`,
+          `errors=${errorCount}, slow=${slowRequestCount}, ` +
+          `mempool=${mempoolSnapshotStats().txids}tx/${mempoolSnapshotStats().addresses}addr`,
       );
       const top = [...methodCounts.entries()]
         .sort((a, b) => b[1] - a[1])
