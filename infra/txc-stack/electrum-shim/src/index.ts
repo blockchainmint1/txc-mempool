@@ -6,7 +6,7 @@ import net from "node:net";
 import tls from "node:tls";
 import fs from "node:fs";
 import { handle, RpcFault, getTip, statusFor } from "./methods.js";
-import { indexStats, refreshScripthashMap } from "./db.js";
+import { operationalStats, refreshScripthashMap } from "./db.js";
 import { startFeeWarmer } from "./fees.js";
 import { mempoolSnapshotStats, startMempoolWatcher } from "./mempool.js";
 
@@ -45,6 +45,13 @@ function send(c: Client, payload: unknown): void {
 
 async function handleOne(req: Record<string, unknown>, c: Client): Promise<unknown> {
   const startedAt = Date.now();
+  if (!req || typeof req !== "object" || Array.isArray(req)) {
+    return {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32600, message: "Invalid Request" },
+    };
+  }
   const id = req.id ?? null;
   const method = String(req.method ?? "");
   const params = Array.isArray(req.params) ? req.params : [];
@@ -96,6 +103,10 @@ async function onLine(line: string, c: Client): Promise<void> {
   // Batch requests: electrum-client uses these heavily (getHistoryBatch,
   // listunspentBatch, transaction.getBatch) — the reply must be an array.
   if (Array.isArray(parsed)) {
+    if (parsed.length === 0) {
+      send(c, { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request" } });
+      return;
+    }
     const out = await Promise.all(
       parsed.map((r) => handleOne(r as Record<string, unknown>, c)),
     );
@@ -118,14 +129,28 @@ function attach(socket: net.Socket): void {
   socket.on("data", (chunk) => {
     c.buf += chunk.toString("utf8");
     if (c.buf.length > MAX_LINE) {
-      socket.destroy();
+      console.warn(`[electrum] closing client: request exceeded ${MAX_LINE} bytes`);
+      send(c, {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32600, message: "Request too large" },
+      });
+      socket.end();
       return;
     }
     let nl: number;
     while ((nl = c.buf.indexOf("\n")) >= 0) {
       const line = c.buf.slice(0, nl);
       c.buf = c.buf.slice(nl + 1);
-      void onLine(line, c);
+      void onLine(line, c).catch((e) => {
+        errorCount++;
+        console.error("[electrum] request dispatch failed:", (e as Error).message);
+        send(c, {
+          jsonrpc: "2.0",
+          id: null,
+          error: { code: -32603, message: "Internal error" },
+        });
+      });
     }
   });
   socket.on("error", () => socket.destroy());
@@ -225,13 +250,13 @@ function start(): void {
   setInterval(() => void refreshMap("refresh"), MAP_REFRESH_MS);
   setInterval(() => {
     try {
-      const stats = indexStats();
+      const stats = operationalStats();
       const lag = lastTipHeight < 0 ? "unknown" : String(Math.max(0, lastTipHeight - stats.indexerTip));
       console.log(
         `[electrum] health: index=${stats.indexerTip}, node=${lastTipHeight}, lag=${lag} blocks, ` +
-          `addresses=${stats.indexedAddresses}, mapped=${stats.mappedScripthashes}, ` +
+          `mapped=${stats.mappedScripthashes}, ` +
           `map_refresh=${mapRefreshRunning ? "running" : "idle"}, map_ms=${lastMapStats.ms}, ` +
-          `txs=${stats.indexedTransactions}, clients=${clients.size}, requests=${requestCount}, ` +
+          `clients=${clients.size}, requests=${requestCount}, ` +
           `errors=${errorCount}, slow=${slowRequestCount}, ` +
           `mempool=${mempoolSnapshotStats().txids}tx/${mempoolSnapshotStats().addresses}addr`,
       );

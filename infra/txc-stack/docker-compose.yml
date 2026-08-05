@@ -104,6 +104,9 @@ services:
       # of get_balance calls). Counts are reported in the 60s health line
       # instead; flip to "true" only while debugging a specific client.
       LOG_REQUESTS: "false"
+      # Stay below the wallet's own request timeout so it receives a JSON-RPC
+      # error rather than reporting a generic socket/network failure.
+      RPC_TIMEOUT_MS: "8000"
 
     volumes:
       - ./data/indexer:/indexer:ro

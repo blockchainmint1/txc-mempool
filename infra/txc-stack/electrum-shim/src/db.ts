@@ -33,6 +33,29 @@ export interface IndexStats {
   mappedScripthashes: number;
 }
 
+export interface OperationalStats {
+  indexerTip: number;
+  mappedScripthashes: number;
+}
+
+/**
+ * Cheap counters for the once-per-minute health line. Keep this deliberately
+ * free of COUNT(DISTINCT ...) scans: better-sqlite3 is synchronous, so an
+ * expensive telemetry query also pauses TLS handshakes for every wallet.
+ */
+export function operationalStats(): OperationalStats {
+  const tip = idx.prepare("SELECT MAX(height) AS height FROM blocks").get() as {
+    height: number | null;
+  };
+  const mapped = map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
+    count: number;
+  };
+  return {
+    indexerTip: tip.height ?? -1,
+    mappedScripthashes: mapped.count,
+  };
+}
+
 export function indexStats(): IndexStats {
   const index = idx
     .prepare(
@@ -70,6 +93,16 @@ export function scripthashToAddress(scripthash: string): string | null {
  * scripthash entry. Cheap after the first pass because the insert is
  * INSERT OR IGNORE against a primary key.
  */
+// The side-car survives container rebuilds. If it already has rows, resume from
+// a small overlap near the current tip instead of re-running a full-chain scan
+// during every boot (the exact window in which phones reconnect). A brand-new
+// installation still performs the complete one-time backfill.
+const existingMappedRows = (map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
+  count: number;
+}).count;
+let mappedThroughHeight: number | null =
+  existingMappedRows > 0 ? Math.max(-1, indexerTipHeight() - 12) : null;
+
 export async function refreshScripthashMap(): Promise<{
   added: number;
   scanned: number;
@@ -77,22 +110,36 @@ export async function refreshScripthashMap(): Promise<{
   ms: number;
 }> {
   const startedAt = Date.now();
-  const rows = idx
-    .prepare(
-      // `balances` and `address_txs` only cover *confirmed* activity, and
-      // `outputs` covers everything the chain has ever paid. `mempool_address_txs`
-      // is what makes a brand-new wallet's first *incoming pending* payment
-      // resolvable — without it the receiving scripthash is unknown, so
-      // get_balance/get_history answer empty and the wallet balance never moves.
-      `SELECT address FROM balances
-       UNION
-       SELECT DISTINCT address FROM address_txs WHERE address IS NOT NULL
-       UNION
-       SELECT DISTINCT address FROM outputs WHERE address IS NOT NULL
-       UNION
-       SELECT DISTINCT address FROM mempool_address_txs WHERE address IS NOT NULL`,
-    )
-    .all() as { address: string }[];
+  const tip = indexerTipHeight();
+  // The first pass validates/backfills the complete side-car. Every later pass
+  // only examines newly indexed block rows. The previous implementation ran
+  // four full-chain UNION/DISTINCT scans every minute; because better-sqlite3
+  // is synchronous, that periodically froze Node's TLS event loop and iOS
+  // reported the handshake timeout as a generic "Network Error".
+  const rows = mappedThroughHeight === null
+    ? (idx
+        .prepare(
+          `SELECT address FROM balances
+           UNION
+           SELECT DISTINCT address FROM address_txs WHERE address IS NOT NULL
+           UNION
+           SELECT DISTINCT address FROM outputs WHERE address IS NOT NULL
+           UNION
+           SELECT DISTINCT address FROM mempool_address_txs WHERE address IS NOT NULL`,
+        )
+        .all() as { address: string }[])
+    : (idx
+        .prepare(
+          `SELECT DISTINCT address FROM outputs
+           WHERE address IS NOT NULL AND height > ?
+           UNION
+           SELECT DISTINCT address FROM address_txs
+           WHERE address IS NOT NULL AND height > ?
+           UNION
+           SELECT DISTINCT address FROM mempool_address_txs
+           WHERE address IS NOT NULL`,
+        )
+        .all(mappedThroughHeight, mappedThroughHeight) as { address: string }[]);
   let added = 0;
   const insertBatch = map.transaction((list: { address: string }[]) => {
     for (const { address } of list) {
@@ -114,6 +161,7 @@ export async function refreshScripthashMap(): Promise<{
   const total = (map.prepare("SELECT COUNT(*) AS count FROM scripthashes").get() as {
     count: number;
   }).count;
+  mappedThroughHeight = tip;
   return { added, scanned: rows.length, total, ms: Date.now() - startedAt };
 }
 
