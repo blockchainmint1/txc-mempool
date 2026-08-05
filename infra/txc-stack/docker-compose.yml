@@ -76,7 +76,38 @@ services:
     expose:
       - "3001"
 
+  # Electrum protocol front door for the TXC Wallet mobile app. Replaces the
+  # standalone ElectrumX fleet — same node, same index, ~600 lines of protocol
+  # translation. Raw TLS on 50002, so it bypasses nginx entirely and its DNS
+  # record must NOT be Cloudflare-proxied.
+  electrum:
+    build: ./electrum-shim
+    image: txc-electrum-shim:latest
+    container_name: txc-electrum
+    restart: unless-stopped
+    depends_on:
+      - indexer
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RPC_URL: "http://host.docker.internal:${RPC_PORT}"
+      RPC_USER: "${RPC_USER}"
+      RPC_PASSWORD: "${RPC_PASSWORD}"
+      INDEXER_DB_PATH: "/indexer/indexer.sqlite"
+      MAP_DB_PATH: "/data/scripthash.sqlite"
+      TLS_CERT: "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+      TLS_KEY: "/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
+      TCP_PORT: "50001"
+      TLS_PORT: "50002"
+    volumes:
+      - ./data/indexer:/indexer:ro
+      - ./data/electrum:/data
+      - ./data/certbot/conf:/etc/letsencrypt:ro
+    ports:
+      - "50002:50002"
+
   nginx:
+
     image: nginx:alpine
     container_name: txc-nginx
     restart: unless-stopped
