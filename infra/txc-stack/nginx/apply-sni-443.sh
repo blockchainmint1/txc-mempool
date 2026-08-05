@@ -40,13 +40,15 @@ cat >> "$CONF" <<'EOF'
 # electrum*.<domain>:443 is raw Electrum TLS for the wallet app; everything
 # else is the normal HTTPS API terminated by the vhost above on 8443.
 stream {
-    map $ssl_preread_server_name $txc_upstream {
-        ~^electrum   electrum_backend;
-        default      https_backend;
-    }
+    # Docker's embedded DNS. Required so `electrum:50002` is resolved per
+    # connection — a static upstream is resolved once at startup and keeps
+    # dialling a dead IP (hanging) after the shim container is recreated.
+    resolver 127.0.0.11 valid=10s ipv6=off;
 
-    upstream electrum_backend { server electrum:50002; }
-    upstream https_backend    { server 127.0.0.1:8443; }
+    map $ssl_preread_server_name $txc_upstream {
+        ~^electrum   electrum:50002;
+        default      127.0.0.1:8443;
+    }
 
     server {
         listen 443;
@@ -58,6 +60,7 @@ stream {
     }
 }
 EOF
+
 
 cd "$STACK"
 echo "Validating..."
