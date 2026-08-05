@@ -139,24 +139,30 @@ export async function refreshScripthashMap(): Promise<{
   });
 
   for (const table of SOURCE_TABLES) {
-    let cursor = getWatermark(table);
-    const select = idx.prepare(
-      `SELECT rowid AS rid, address FROM ${table}
-       WHERE rowid > ? AND address IS NOT NULL
-       ORDER BY rowid ASC LIMIT ${CHUNK}`,
-    );
-    while (scanned < MAX_ROWS_PER_PASS) {
-      const rows = select.all(cursor) as { rid: number; address: string }[];
-      if (rows.length === 0) break;
-      insertBatch(rows);
-      scanned += rows.length;
-      cursor = rows[rows.length - 1]!.rid;
-      writeWatermark.run(table, cursor);
-      // Give sockets, TLS handshakes and RPC callbacks a turn.
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      if (rows.length < CHUNK) break;
+    try {
+      let cursor = getWatermark(table);
+      const select = idx.prepare(
+        `SELECT rowid AS rid, address FROM ${table}
+         WHERE rowid > ? AND address IS NOT NULL
+         ORDER BY rowid ASC LIMIT ${CHUNK}`,
+      );
+      while (scanned < MAX_ROWS_PER_PASS) {
+        const rows = select.all(cursor) as { rid: number; address: string }[];
+        if (rows.length === 0) break;
+        insertBatch(rows);
+        scanned += rows.length;
+        cursor = rows[rows.length - 1]!.rid;
+        writeWatermark.run(table, cursor);
+        // Give sockets, TLS handshakes and RPC callbacks a turn.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (rows.length < CHUNK) break;
+      }
+    } catch (e) {
+      // A missing/renamed source table must never take the wallet endpoint down.
+      console.error(`[electrum] map scan skipped ${table}:`, (e as Error).message);
     }
   }
+
 
   // Mempool addresses are a handful of rows — always mapped in full.
   const pending = idx
