@@ -115,6 +115,8 @@ services:
     depends_on:
       - mempool-api
       - indexer
+      - electrum
+
     ports:
       - "80:80"
       - "443:443"
