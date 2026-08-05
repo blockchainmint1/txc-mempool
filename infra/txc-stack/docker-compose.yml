@@ -171,5 +171,6 @@ services:
       - ./data/certbot/www:/var/www/certbot
     entrypoint: >
       /bin/sh -c "trap exit TERM;
-      while :; do certbot renew --webroot -w /var/www/certbot --quiet;
+      while :; do certbot renew --webroot -w /var/www/certbot
+      --key-type rsa --preferred-chain 'ISRG Root X1' --quiet;
       sleep 12h & wait $${!}; done"
