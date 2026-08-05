@@ -6,7 +6,9 @@
 const RPC_URL = process.env.RPC_URL ?? "http://host.docker.internal:15739";
 const RPC_USER = process.env.RPC_USER ?? "";
 const RPC_PASS = process.env.RPC_PASSWORD ?? "";
-const RPC_TIMEOUT_MS = Number(process.env.RPC_TIMEOUT_MS ?? 30_000);
+// Fail before a mobile Electrum client's own request timer expires. A late RPC
+// response is useless after iOS has already marked the server disconnected.
+const RPC_TIMEOUT_MS = Number(process.env.RPC_TIMEOUT_MS ?? 8_000);
 
 const AUTH = "Basic " + Buffer.from(`${RPC_USER}:${RPC_PASS}`).toString("base64");
 
