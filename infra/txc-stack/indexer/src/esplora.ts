@@ -2,7 +2,7 @@
 // Spec: https://github.com/Blockstream/esplora/blob/master/API.md
 
 import Fastify from "fastify";
-import { db, getTipHeight } from "./db.js";
+import { db, getTipHeight, getBlockHashAt } from "./db.js";
 import {
   getBlockCount,
   getBlockHash,
