@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
-const isAddr = (addr: string) => /^[A-Za-z0-9]{14,120}$/.test(addr);
+// `_status` is the indexer's health probe, not an address — allow it through
+// so canary/health checks work on this domain too.
+const isAddr = (addr: string) => addr === "_status" || /^[A-Za-z0-9]{14,120}$/.test(addr);
 
 export const Route = createFileRoute("/api/address/$addr")({
   server: {

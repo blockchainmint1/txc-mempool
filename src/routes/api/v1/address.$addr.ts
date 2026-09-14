@@ -2,7 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { proxy } from "@/lib/api/backend";
 import { optionsHandler, errorResponse } from "@/lib/api/cors";
 
-const isAddr = (a: string) => /^[A-Za-z0-9]{14,120}$/.test(a);
+// `_status` is the indexer's health probe, not an address.
+const isAddr = (a: string) => a === "_status" || /^[A-Za-z0-9]{14,120}$/.test(a);
 
 export const Route = createFileRoute("/api/v1/address/$addr")({
   server: {
