@@ -581,16 +581,32 @@ function toEsploraBlockSummary(b: RpcBlock): unknown {
 }
 
 // GET /blocks/tip/height — current chain height (text/plain integer)
+// If RPC is momentarily unavailable, fall back to our own indexed tip rather
+// than 500-ing: it trails the node by at most one block and every caller
+// (explorer, wallet, miners) prefers a slightly stale number to an error.
 app.get("/blocks/tip/height", async (_req, reply) => {
-  const h = await getBlockCount();
-  return reply.type("text/plain").send(String(h));
+  try {
+    const h = await getBlockCount();
+    return reply.type("text/plain").send(String(h));
+  } catch (err) {
+    const local = getTipHeight();
+    if (local >= 0) return reply.type("text/plain").send(String(local));
+    throw err;
+  }
 });
 
 // GET /blocks/tip/hash — tip hash (text/plain)
 app.get("/blocks/tip/hash", async (_req, reply) => {
-  const h = await getBlockCount();
-  const hash = await getBlockHash(h);
-  return reply.type("text/plain").send(hash);
+  try {
+    const h = await getBlockCount();
+    const hash = await getBlockHash(h);
+    return reply.type("text/plain").send(hash);
+  } catch (err) {
+    const local = getTipHeight();
+    const localHash = local >= 0 ? getBlockHashAt(local) : null;
+    if (localHash) return reply.type("text/plain").send(localHash);
+    throw err;
+  }
 });
 
 // GET /blocks  -or-  /blocks/:start_height — last 10 blocks starting from tip or given height
