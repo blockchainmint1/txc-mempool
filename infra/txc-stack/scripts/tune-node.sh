@@ -55,7 +55,7 @@ done
 echo "==> restarting node"
 SVC=""
 for s in texitcoind texitcoin; do
-  systemctl list-unit-files | grep -q "^${s}\.service" && SVC="$s" && break
+  systemctl cat "${s}.service" >/dev/null 2>&1 && SVC="$s" && break
 done
 if [ -n "$SVC" ]; then
   systemctl restart "$SVC"
