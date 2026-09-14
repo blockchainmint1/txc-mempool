@@ -17,7 +17,52 @@ export class RpcError extends Error {
   }
 }
 
+// Retry policy. texitcoind answers "Work queue depth exceeded" (plain text,
+// HTTP 500) when rpcworkqueue is saturated, and "Service Unavailable" during
+// warmup. Both are transient: the correct response is a short backoff and a
+// retry, not a 500 propagated all the way out to a browser or a wallet.
+const RPC_RETRIES = Number(process.env.RPC_RETRIES ?? 3);
+const RPC_RETRY_BASE_MS = Number(process.env.RPC_RETRY_BASE_MS ?? 120);
+
+function isRetryable(err: unknown): boolean {
+  if (err instanceof RpcError) {
+    if (err.code === 502 || err.code === 503 || err.code === 500) return true;
+    const m = err.message.toLowerCase();
+    return (
+      m.includes("work queue") ||
+      m.includes("service unavailable") ||
+      m.includes("non-json rpc response") ||
+      m.includes("warming up") ||
+      m.includes("loading block index")
+    );
+  }
+  const name = (err as { name?: string })?.name;
+  // AbortError (our own timeout) and low-level fetch/socket failures.
+  return name === "AbortError" || name === "TypeError" || name === "FetchError";
+}
+
+/** Methods that are safe to replay. Never retry a broadcast. */
+const NON_IDEMPOTENT = new Set(["sendrawtransaction"]);
+
 export async function rpc<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
+  const attempts = NON_IDEMPOTENT.has(method) ? 1 : RPC_RETRIES;
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await rpcOnce<T>(method, params);
+    } catch (err) {
+      lastErr = err;
+      if (i === attempts - 1 || !isRetryable(err)) throw err;
+      // Exponential backoff with jitter so a thundering herd of clients
+      // doesn't re-saturate the work queue in lockstep.
+      const wait = RPC_RETRY_BASE_MS * 2 ** i + Math.floor(Math.random() * 80);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
+}
+
+async function rpcOnce<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
   const id = nextId++;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), RPC_TIMEOUT_MS);
@@ -111,8 +156,42 @@ export interface RpcBlock {
   tx: RpcTx[]; // when verbosity=2
 }
 
-export const getBlockCount = () => rpc<number>("getblockcount");
-export const getBlockHash = (h: number) => rpc<string>("getblockhash", [h]);
+// getblockcount is the single hottest RPC on the box: every explorer client
+// polls the tip every couple of seconds. A 1.5s in-process cache collapses
+// that into at most one node call per interval even if nginx's cache misses.
+let tipCache: { height: number; at: number } | null = null;
+const TIP_CACHE_MS = Number(process.env.TIP_CACHE_MS ?? 1_500);
+
+export async function getBlockCount(): Promise<number> {
+  const now = Date.now();
+  if (tipCache && now - tipCache.at < TIP_CACHE_MS) return tipCache.height;
+  try {
+    const height = await rpc<number>("getblockcount");
+    tipCache = { height, at: now };
+    return height;
+  } catch (err) {
+    // Last-known-good tip beats a 500. At most a few minutes stale, and only
+    // while the node is refusing RPC.
+    if (tipCache) return tipCache.height;
+    throw err;
+  }
+}
+
+// Block hashes are immutable once buried, so memoize them permanently for
+// heights that are well behind the tip. Saves a node round-trip on every
+// /blocks listing and every block page load.
+const hashCache = new Map<number, string>();
+export async function getBlockHash(h: number): Promise<string> {
+  const cached = hashCache.get(h);
+  if (cached) return cached;
+  const hash = await rpc<string>("getblockhash", [h]);
+  const tip = tipCache?.height ?? h;
+  if (tip - h >= 6) {
+    if (hashCache.size > 20_000) hashCache.clear();
+    hashCache.set(h, hash);
+  }
+  return hash;
+}
 export const getBlockVerbose = (hash: string) => rpc<RpcBlock>("getblock", [hash, 2]);
 export const getRawTx = (txid: string) => rpc<RpcTx>("getrawtransaction", [txid, true]);
 export const getRawMempool = () => rpc<string[]>("getrawmempool");
