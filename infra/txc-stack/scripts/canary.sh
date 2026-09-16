@@ -14,8 +14,10 @@
 
 set -uo pipefail
 
-DOMAIN="${DOMAIN:-mempool.texitcoin.org}"
-API_DOMAIN="${API_DOMAIN:-api.mempool.texitcoin.org}"
+# NOTE: the stack .env defines DOMAIN as the *API* host (api.mempool...), so we
+# keep our own names here and re-assert them after sourcing .env below.
+SITE_DOMAIN_OVERRIDE="${SITE_DOMAIN:-}"
+API_DOMAIN_OVERRIDE="${API_DOMAIN:-}"
 ELECTRUM_HOST="${ELECTRUM_HOST:-electrum1.texitcoin.org}"
 STACK_DIR="${STACK_DIR:-/opt/txc-stack}"
 NODE_CONF="${NODE_CONF:-/var/lib/texitcoin/texitcoin.conf}"
@@ -55,7 +57,8 @@ http_check() {
   out=$(curl -sS -m 20 -o /tmp/canary.body -w '%{http_code} %{time_total}' "$url" 2>/dev/null) || {
     report FAIL "$label" "no response"; return; }
   code="${out%% *}"; time="${out##* }"
-  body=$(head -c 200 /tmp/canary.body | tr -d '\n')
+  # Strip CR/LF and HTML tags so an error page can never scramble the table.
+  body=$(head -c 400 /tmp/canary.body | tr -d '\r\n' | sed 's/<[^>]*>/ /g' | tr -s ' ')
   if [ "$code" != "200" ]; then
     report FAIL "$label" "HTTP $code — ${body:0:80}"; return
   fi
