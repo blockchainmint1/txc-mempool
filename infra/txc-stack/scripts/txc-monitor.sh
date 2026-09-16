@@ -42,12 +42,16 @@ fi
 
 log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"; }
 
-tg() { # tg <text>
+tg() { # tg <text>  (TELEGRAM_CHAT_ID may be comma-separated for multiple chats)
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || return 0
-  curl -s -m 15 -o /dev/null \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "text=$1"
+  local chat
+  for chat in ${TELEGRAM_CHAT_ID//,/ }; do
+    [ -n "$chat" ] || continue
+    curl -s -m 15 -o /dev/null \
+      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${chat}" \
+      --data-urlencode "text=$1"
+  done
 }
 
 rpc_raw() { # rpc_raw <method>
