@@ -211,7 +211,9 @@ http_check "raw backend"         "https://${API}/api/blocks/tip/height"    1.5 '
 http_check "homepage"            "https://${SITE}/"                             4.0 '<html'
 
 # CORS must be present exactly once (duplicate headers break browsers).
-acao=$(curl -sSI -m 15 "https://${SITE}/api/blocks/tip/height" | grep -ci '^access-control-allow-origin')
+# Use a real GET with an Origin header: browsers only need CORS on GET/POST,
+# and the site does not add CORS headers to HEAD requests (false alarm).
+acao=$(curl -s -D - -o /dev/null -m 15 -H "Origin: https://example.com" "https://${SITE}/api/blocks/tip/height" | grep -ci '^access-control-allow-origin')
 if   [ "${acao:-0}" -eq 1 ]; then report PASS "CORS header" "present once"
 elif [ "${acao:-0}" -eq 0 ]; then report FAIL "CORS header" "missing"
 else report FAIL "CORS header" "duplicated (${acao}x)"; fi
