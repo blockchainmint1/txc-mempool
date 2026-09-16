@@ -14,8 +14,10 @@
 
 set -uo pipefail
 
-DOMAIN="${DOMAIN:-mempool.texitcoin.org}"
-API_DOMAIN="${API_DOMAIN:-api.mempool.texitcoin.org}"
+# NOTE: the stack .env defines DOMAIN as the *API* host (api.mempool...), so we
+# keep our own names here and re-assert them after sourcing .env below.
+SITE_DOMAIN_OVERRIDE="${SITE_DOMAIN:-}"
+API_DOMAIN_OVERRIDE="${API_DOMAIN:-}"
 ELECTRUM_HOST="${ELECTRUM_HOST:-electrum1.texitcoin.org}"
 STACK_DIR="${STACK_DIR:-/opt/txc-stack}"
 NODE_CONF="${NODE_CONF:-/var/lib/texitcoin/texitcoin.conf}"
@@ -55,7 +57,8 @@ http_check() {
   out=$(curl -sS -m 20 -o /tmp/canary.body -w '%{http_code} %{time_total}' "$url" 2>/dev/null) || {
     report FAIL "$label" "no response"; return; }
   code="${out%% *}"; time="${out##* }"
-  body=$(head -c 200 /tmp/canary.body | tr -d '\n')
+  # Strip CR/LF and HTML tags so an error page can never scramble the table.
+  body=$(head -c 400 /tmp/canary.body | tr -d '\r\n' | sed 's/<[^>]*>/ /g' | tr -s ' ')
   if [ "$code" != "200" ]; then
     report FAIL "$label" "HTTP $code — ${body:0:80}"; return
   fi
@@ -86,6 +89,11 @@ if [ -f "$STACK_DIR/.env" ]; then
   set -a; # shellcheck disable=SC1091
   source "$STACK_DIR/.env"; set +a
 fi
+
+# .env's DOMAIN is the API host; the app routes (price, supply, richlist,
+# mining, homepage) live on the site host. Keep the two apart.
+SITE="${SITE_DOMAIN_OVERRIDE:-mempool.texitcoin.org}"
+API="${API_DOMAIN_OVERRIDE:-${DOMAIN:-api.mempool.texitcoin.org}}"
 
 # ---- 1. host resources -----------------------------------------------------
 echo "-- host --"
@@ -169,7 +177,7 @@ fi
 # ---- 4. indexer ------------------------------------------------------------
 echo
 echo "-- address indexer --"
-idx=$(curl -s -m 15 "https://${API_DOMAIN}/api/address/_status")
+idx=$(curl -s -m 15 "https://${API}/api/address/_status")
 if echo "$idx" | grep -q 'indexed_tip'; then
   idx_tip=$(echo "$idx" | jnum indexed_tip)
   if [ -n "$node_height" ] && [ -n "$idx_tip" ]; then
@@ -186,30 +194,30 @@ fi
 
 # ---- 5. public API surface --------------------------------------------------
 echo
-echo "-- public API (https://${DOMAIN}) --"
-http_check "tip height"          "https://${DOMAIN}/api/blocks/tip/height"        1.5 '^[0-9]'
-http_check "tip hash"            "https://${DOMAIN}/api/blocks/tip/hash"          1.5 '^[0-9a-f]\{64\}'
-http_check "blocks listing"      "https://${DOMAIN}/api/v1/blocks"                2.5 'height'
-http_check "mempool summary"     "https://${DOMAIN}/api/v1/mempool"               2.0 'count'
-http_check "fees recommended"    "https://${DOMAIN}/api/v1/fees/recommended"      2.0 'fastestFee'
-http_check "difficulty adjust"   "https://${DOMAIN}/api/v1/difficulty-adjustment" 2.0 'progressPercent'
-http_check "network hashrate"    "https://${DOMAIN}/api/v1/mining/hashrate"       6.0 'currentHashrate'
-http_check "pool ranking 1w"     "https://${DOMAIN}/api/v1/mining/pools/1w"       6.0 'pools'
-http_check "richlist"            "https://${DOMAIN}/api/v1/richlist"              2.0 'entries'
-http_check "supply"              "https://${DOMAIN}/api/v1/supply"                2.5 'circulating'
-http_check "price"               "https://${DOMAIN}/api/v1/price"                 2.5 'usd'
-http_check "legacy /v1/default"  "https://${DOMAIN}/v1/default"                   2.5 'price'
-http_check "raw backend"         "https://${API_DOMAIN}/api/blocks/tip/height"    1.5 '^[0-9]'
-http_check "homepage"            "https://${DOMAIN}/"                             4.0 '<html'
+echo "-- public API (https://${SITE}) --"
+http_check "tip height"          "https://${SITE}/api/blocks/tip/height"        1.5 '^[0-9]'
+http_check "tip hash"            "https://${SITE}/api/blocks/tip/hash"          1.5 '^[0-9a-f]\{64\}'
+http_check "blocks listing"      "https://${SITE}/api/v1/blocks"                2.5 'height'
+http_check "mempool summary"     "https://${SITE}/api/v1/mempool"               2.0 'count'
+http_check "fees recommended"    "https://${SITE}/api/v1/fees/recommended"      2.0 'fastestFee'
+http_check "difficulty adjust"   "https://${SITE}/api/v1/difficulty-adjustment" 2.0 'progressPercent'
+http_check "network hashrate"    "https://${SITE}/api/v1/mining/hashrate"       6.0 'currentHashrate'
+http_check "pool ranking 1w"     "https://${SITE}/api/v1/mining/pools/1w"       6.0 'pools'
+http_check "richlist"            "https://${SITE}/api/v1/richlist"              2.0 'entries'
+http_check "supply"              "https://${SITE}/api/v1/supply"                2.5 'circulating'
+http_check "price"               "https://${SITE}/api/v1/price"                 2.5 'usd'
+http_check "legacy /v1/default"  "https://${SITE}/v1/default"                   2.5 'price'
+http_check "raw backend"         "https://${API}/api/blocks/tip/height"    1.5 '^[0-9]'
+http_check "homepage"            "https://${SITE}/"                             4.0 '<html'
 
 # CORS must be present exactly once (duplicate headers break browsers).
-acao=$(curl -sSI -m 15 "https://${DOMAIN}/api/blocks/tip/height" | grep -ci '^access-control-allow-origin')
+acao=$(curl -sSI -m 15 "https://${SITE}/api/blocks/tip/height" | grep -ci '^access-control-allow-origin')
 if   [ "${acao:-0}" -eq 1 ]; then report PASS "CORS header" "present once"
 elif [ "${acao:-0}" -eq 0 ]; then report FAIL "CORS header" "missing"
 else report FAIL "CORS header" "duplicated (${acao}x)"; fi
 
 # API height must track the node.
-api_h=$(curl -s -m 15 "https://${DOMAIN}/api/blocks/tip/height" | tr -dc '0-9')
+api_h=$(curl -s -m 15 "https://${SITE}/api/blocks/tip/height" | tr -dc '0-9')
 if [ -n "$api_h" ] && [ -n "$node_height" ]; then
   d=$(( node_height - api_h )); [ "$d" -lt 0 ] && d=$(( -d ))
   if [ "$d" -gt 3 ]; then report FAIL "API vs node height" "API ${api_h}, node ${node_height}"
@@ -231,7 +239,7 @@ done
 # ---- 7. TLS certificate expiry ---------------------------------------------
 echo
 echo "-- certificates --"
-for h in "$DOMAIN" "$API_DOMAIN" "$ELECTRUM_HOST"; do
+for h in "$SITE" "$API" "$ELECTRUM_HOST"; do
   end=$(echo | timeout 12 openssl s_client -servername "$h" -connect "$h:443" 2>/dev/null \
         | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
   if [ -z "$end" ]; then report FAIL "cert $h" "could not read certificate"; continue; fi
