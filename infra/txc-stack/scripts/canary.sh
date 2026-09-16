@@ -90,6 +90,11 @@ if [ -f "$STACK_DIR/.env" ]; then
   source "$STACK_DIR/.env"; set +a
 fi
 
+# .env's DOMAIN is the API host; the app routes (price, supply, richlist,
+# mining, homepage) live on the site host. Keep the two apart.
+SITE="${SITE_DOMAIN_OVERRIDE:-mempool.texitcoin.org}"
+API="${API_DOMAIN_OVERRIDE:-${DOMAIN:-api.mempool.texitcoin.org}}"
+
 # ---- 1. host resources -----------------------------------------------------
 echo "-- host --"
 disk_pct=$(df -P / | awk 'NR==2{gsub("%","",$5); print $5}')
