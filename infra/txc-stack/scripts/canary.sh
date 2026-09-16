@@ -247,10 +247,13 @@ echo "==> ${PASS} pass, ${WARN} warn, ${FAIL} fail"
 
 if [ "$ALERT" = 1 ] && [ -n "$PROBLEMS" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
   msg="TXC canary on $(hostname): ${FAIL} fail, ${WARN} warn"$'\n\n'"${PROBLEMS}"
-  curl -s -m 15 -o /dev/null \
-    "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "text=${msg}"
+  for chat in ${TELEGRAM_CHAT_ID//,/ }; do
+    [ -n "$chat" ] || continue
+    curl -s -m 15 -o /dev/null \
+      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${chat}" \
+      --data-urlencode "text=${msg}"
+  done
   echo "==> Telegram alert sent"
 fi
 
