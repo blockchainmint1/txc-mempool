@@ -253,16 +253,26 @@ done
 echo
 echo "==> ${PASS} pass, ${WARN} warn, ${FAIL} fail"
 
-if [ "$ALERT" = 1 ] && [ -n "$PROBLEMS" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+if [ "$ALERT" = 1 ] && [ -n "$PROBLEMS" ]; then
   msg="TXC canary on $(hostname): ${FAIL} fail, ${WARN} warn"$'\n\n'"${PROBLEMS}"
-  for chat in ${TELEGRAM_CHAT_ID//,/ }; do
-    [ -n "$chat" ] || continue
-    curl -s -m 15 -o /dev/null \
-      "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-      --data-urlencode "chat_id=${chat}" \
-      --data-urlencode "text=${msg}"
-  done
-  echo "==> Telegram alert sent"
+  if [ -n "${TELEGRAM_NOTIFY_SECRET:-}" ]; then
+    # Preferred: relay through the site's notify endpoint (bot token lives in
+    # Lovable's secret store, not on the box).
+    curl -s -m 15 -o /dev/null -X POST \
+      "${TELEGRAM_NOTIFY_URL:-https://mempool.texitcoin.org/api/public/notify}" \
+      -H 'Content-Type: application/json' \
+      --data "$(python3 -c 'import json,sys; print(json.dumps({"secret": sys.argv[1], "text": sys.argv[2]}))' "$TELEGRAM_NOTIFY_SECRET" "$msg")"
+    echo "==> Telegram alert sent (via relay)"
+  elif [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+    for chat in ${TELEGRAM_CHAT_ID//,/ }; do
+      [ -n "$chat" ] || continue
+      curl -s -m 15 -o /dev/null \
+        "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        --data-urlencode "chat_id=${chat}" \
+        --data-urlencode "text=${msg}"
+    done
+    echo "==> Telegram alert sent"
+  fi
 fi
 
 if [ "$FAIL" -gt 0 ]; then exit 2; fi

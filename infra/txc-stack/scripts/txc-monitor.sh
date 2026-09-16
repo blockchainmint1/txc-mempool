@@ -42,7 +42,17 @@ fi
 
 log() { echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') $*"; }
 
-tg() { # tg <text>  (TELEGRAM_CHAT_ID may be comma-separated for multiple chats)
+tg() { # tg <text>
+  # Preferred: relay through the site's notify endpoint, which holds the bot
+  # token in Lovable's secret store — the box only needs TELEGRAM_NOTIFY_SECRET.
+  if [ -n "${TELEGRAM_NOTIFY_SECRET:-}" ]; then
+    curl -s -m 15 -o /dev/null -X POST \
+      "${TELEGRAM_NOTIFY_URL:-https://mempool.texitcoin.org/api/public/notify}" \
+      -H 'Content-Type: application/json' \
+      --data "$(python3 -c 'import json,sys; print(json.dumps({"secret": sys.argv[1], "text": sys.argv[2]}))' "$TELEGRAM_NOTIFY_SECRET" "$1")"
+    return 0
+  fi
+  # Fallback: talk to Telegram directly (needs token + chat id on the box).
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ] || return 0
   local chat
   for chat in ${TELEGRAM_CHAT_ID//,/ }; do
