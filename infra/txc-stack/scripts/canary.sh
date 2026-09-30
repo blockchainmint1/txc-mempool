@@ -226,6 +226,15 @@ if [ -n "$api_h" ] && [ -n "$node_height" ]; then
   else report PASS "API vs node height" "API ${api_h}, node ${node_height}"; fi
 fi
 
+# Newest block must be recent — catches a FROZEN feed, not just a dead one.
+http_check "fees recommended"    "https://${API}/api/v1/fees/recommended"       2.0 'fastestFee'
+http_check "difficulty adjust"   "https://${API}/api/v1/difficulty-adjustment"  3.0 'remainingBlocks'
+age=$(curl -s -m 15 "https://${API}/api/v1/freshness" | grep -o '"ageSeconds":[0-9-]*' | tr -dc '0-9-')
+if   [ -z "$age" ]; then report FAIL "newest block age" "no answer"
+elif [ "$age" -gt 3600 ]; then report FAIL "newest block age" "$((age/60)) min old (frozen?)"
+elif [ "$age" -gt 1200 ]; then report WARN "newest block age" "$((age/60)) min old"
+else report PASS "newest block age" "$((age/60)) min old"; fi
+
 # ---- 6. electrum (wallet app) ----------------------------------------------
 echo
 echo "-- electrum (wallet) --"
