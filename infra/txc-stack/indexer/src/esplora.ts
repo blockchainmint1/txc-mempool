@@ -884,6 +884,177 @@ app.get("/fee-estimates", async (_req, reply) => {
   }
 });
 
+// ---------- mempool.space-style /v1 endpoints (replaces mempool-api) ----------
+function memo<T>(ttlMs: number, fn: () => Promise<T>): () => Promise<T> {
+  let cache: { at: number; val: T } | null = null;
+  let inflight: Promise<T> | null = null;
+  return async () => {
+    if (cache && Date.now() - cache.at < ttlMs) return cache.val;
+    if (inflight) return inflight;
+    inflight = fn()
+      .then((val) => { cache = { at: Date.now(), val }; return val; })
+      .catch((e) => { if (cache) return cache.val; throw e; })
+      .finally(() => { inflight = null; });
+    return inflight;
+  };
+}
+
+const TARGET_SPACING = Number(process.env.TARGET_SPACING ?? 180);
+const RETARGET_INTERVAL = Number(process.env.RETARGET_INTERVAL ?? 2016);
+const MAX_BLOCK_VSIZE = 1_000_000;
+
+interface Hdr { height: number; time: number; difficulty: number }
+async function headerAt(h: number): Promise<Hdr> {
+  const hash = await getBlockHash(h);
+  const r = await rpc<Hdr>("getblockheader", [hash]);
+  return { height: r.height, time: r.time, difficulty: r.difficulty };
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const mempoolBlocks = memo(10_000, async () => {
+  const entries = await getRawMempoolVerbose();
+  const txs = Object.values(entries)
+    .map((e) => {
+      const vs = e.vsize || e.size || 0;
+      const fee = Math.round((e.fees?.base ?? e.fee ?? 0) * 1e8);
+      return { vs, fee, rate: vs > 0 ? fee / vs : 0 };
+    })
+    .filter((t) => t.vs > 0)
+    .sort((a, b) => b.rate - a.rate);
+  const blocks: Array<{ blockSize: number; blockVSize: number; nTx: number; totalFees: number; medianFee: number; feeRange: number[] }> = [];
+  let cur: typeof txs = [];
+  let curVs = 0;
+  const flush = () => {
+    if (!cur.length) return;
+    const r = cur.map((t) => t.rate).sort((a, b) => a - b);
+    const q = (f: number) => round2(r[Math.min(r.length - 1, Math.floor(r.length * f))]);
+    blocks.push({
+      blockSize: curVs, blockVSize: curVs, nTx: cur.length,
+      totalFees: cur.reduce((a, t) => a + t.fee, 0),
+      medianFee: q(0.5), feeRange: [q(0), q(0.25), q(0.5), q(0.75), q(1)],
+    });
+    cur = []; curVs = 0;
+  };
+  for (const t of txs) {
+    if (curVs + t.vs > MAX_BLOCK_VSIZE && blocks.length < 7) flush();
+    cur.push(t); curVs += t.vs;
+  }
+  flush();
+  return blocks;
+});
+
+app.get("/v1/fees/mempool-blocks", async (_req, reply) => {
+  try { return reply.send(await mempoolBlocks()); } catch { return reply.send([]); }
+});
+
+const feesRecommended = memo(15_000, async () => {
+  const info = await getMempoolInfo().catch(() => null);
+  const floor = feerateTxcKvbToSatVb(Math.max(info?.mempoolminfee ?? 0, info?.minrelaytxfee ?? 0)) ?? 1;
+  const est = async (t: number) => {
+    try { return Math.max(feerateTxcKvbToSatVb((await estimateSmartFee(t)).feerate) ?? floor, floor); }
+    catch { return floor; }
+  };
+  const f1 = await est(1), f3 = await est(3), f6 = await est(6), f144 = await est(144);
+  return {
+    fastestFee: round2(f1),
+    halfHourFee: round2(Math.min(f1, f3)),
+    hourFee: round2(Math.min(f1, f3, f6)),
+    economyFee: round2(Math.min(f1, f3, f6, f144)),
+    minimumFee: round2(floor),
+  };
+});
+
+app.get("/v1/fees/recommended", async (_req, reply) => {
+  try { return reply.send(await feesRecommended()); }
+  catch { return reply.send({ fastestFee: 1, halfHourFee: 1, hourFee: 1, economyFee: 1, minimumFee: 1 }); }
+});
+
+const difficultyAdjustment = memo(60_000, async () => {
+  const tip = await getBlockCount();
+  const epochStart = tip - (tip % RETARGET_INTERVAL);
+  const start = await headerAt(epochStart);
+  const now = await headerAt(tip);
+  const done = tip - epochStart;
+  const remainingBlocks = RETARGET_INTERVAL - done;
+  const timeAvg = done > 0 ? (now.time - start.time) / done : TARGET_SPACING;
+  const remainingSec = Math.round(remainingBlocks * timeAvg);
+  let previousRetarget = 0;
+  if (epochStart >= RETARGET_INTERVAL) {
+    const prev = await headerAt(epochStart - RETARGET_INTERVAL);
+    if (prev.difficulty > 0) previousRetarget = (start.difficulty / prev.difficulty - 1) * 100;
+  }
+  return {
+    progressPercent: (done / RETARGET_INTERVAL) * 100,
+    difficultyChange: timeAvg > 0 ? (TARGET_SPACING / timeAvg - 1) * 100 : 0,
+    estimatedRetargetDate: Date.now() + remainingSec * 1000,
+    remainingBlocks,
+    remainingTime: remainingSec * 1000,
+    previousRetarget,
+    nextRetargetHeight: epochStart + RETARGET_INTERVAL,
+    timeAvg: Math.round(timeAvg * 1000),
+    timeOffset: 0,
+  };
+});
+
+app.get("/v1/difficulty-adjustment", async (_req, reply) => {
+  try { return reply.send(await difficultyAdjustment()); }
+  catch (err) {
+    console.error("[indexer] difficulty-adjustment failed:", (err as Error).message);
+    return reply.code(503).send({ error: "temporarily unavailable" });
+  }
+});
+
+// Difficulty history: [timestamp, height, difficulty, changeRatio] per retarget.
+const WINDOWS: Record<string, number> = { "24h": 86400, "3d": 259200, "1w": 604800, "1m": 2592000, "3m": 7776000, "6m": 15552000, "1y": 31536000, "2y": 63072000, "3y": 94608000, all: 1e12 };
+const diffHistCache = new Map<string, { at: number; val: unknown }>();
+app.get<{ Params: { w: string } }>("/v1/mining/difficulty-adjustments/:w", async ({ params }, reply) => {
+  const secs = WINDOWS[params.w];
+  if (!secs) return reply.code(400).send({ error: "invalid window" });
+  const c = diffHistCache.get(params.w);
+  if (c && Date.now() - c.at < 600_000) return reply.send(c.val);
+  try {
+    const tip = await getBlockCount();
+    const want = Math.min(Math.ceil(secs / TARGET_SPACING / RETARGET_INTERVAL) + 2, 200);
+    const rows: Hdr[] = [];
+    for (let h = tip - (tip % RETARGET_INTERVAL); h >= 0 && rows.length < want; h -= RETARGET_INTERVAL) {
+      rows.push(await headerAt(h));
+    }
+    const cutoff = Date.now() / 1000 - secs;
+    const out = rows
+      .map((r, i) => [r.time, r.height, r.difficulty, rows[i + 1] ? r.difficulty / rows[i + 1].difficulty : 1])
+      .filter((r) => (r[0] as number) >= cutoff);
+    diffHistCache.set(params.w, { at: Date.now(), val: out });
+    return reply.send(out);
+  } catch { return reply.send(c?.val ?? []); }
+});
+
+// Reward stats over the last N blocks (getblockstats: subsidy + fees, in sats).
+const rewardCache = new Map<number, { at: number; val: unknown }>();
+app.get<{ Params: { n: string } }>("/v1/mining/reward-stats/:n", async ({ params }, reply) => {
+  const n = Math.min(Math.max(Number(params.n) || 100, 1), 500);
+  const c = rewardCache.get(n);
+  if (c && Date.now() - c.at < 120_000) return reply.send(c.val);
+  try {
+    const tip = await getBlockCount();
+    let reward = 0, fee = 0, txs = 0;
+    for (let h = tip; h > tip - n && h >= 0; h--) {
+      const s = await rpc<{ subsidy: number; totalfee: number; txs: number }>("getblockstats", [h, ["subsidy", "totalfee", "txs"]]);
+      reward += s.subsidy + s.totalfee; fee += s.totalfee; txs += s.txs;
+    }
+    const val = { startBlock: tip - n + 1, endBlock: tip, totalReward: String(reward), totalFee: String(fee), totalTx: String(txs) };
+    rewardCache.set(n, { at: Date.now(), val });
+    return reply.send(val);
+  } catch { return reply.send(c?.val ?? { startBlock: 0, endBlock: 0, totalReward: "0", totalFee: "0", totalTx: "0" }); }
+});
+
+// Newest-block age — lets the canary catch a frozen feed, not just a dead one.
+app.get("/v1/freshness", async (_req, reply) => {
+  const tip = await getBlockCount();
+  const h = await headerAt(tip);
+  return reply.send({ height: tip, blockTime: h.time, ageSeconds: Math.floor(Date.now() / 1000) - h.time });
+});
+
 
 export async function startHttp(): Promise<void> {
   await app.listen({ host: "0.0.0.0", port: PORT });
