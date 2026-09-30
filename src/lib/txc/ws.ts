@@ -33,6 +33,18 @@ const EMPTY: MempoolFeedSnapshot = {
   lastTick: 0,
 };
 
+/** Merge by height (newest data wins per height), newest first. Stale
+ *  sources can never push the strip backwards. */
+function mergeBlocks(prev: BlockSummary[], incoming: BlockSummary[]): BlockSummary[] {
+  const byHeight = new Map<number, BlockSummary>();
+  for (const b of prev) byHeight.set(b.height, b);
+  for (const b of incoming) if (b && typeof b.height === "number") byHeight.set(b.height, b);
+  const sorted = [...byHeight.values()].sort((a, b) => b.height - a.height);
+  const top = sorted[0]?.height ?? 0;
+  // Drop anything far below the tip (e.g. a stale feed's old list).
+  return sorted.filter((b) => top - b.height < 15).slice(0, 15);
+}
+
 export function useMempoolFeed(): MempoolFeedSnapshot {
   const [snap, setSnap] = useState<MempoolFeedSnapshot>(EMPTY);
   const qc = useQueryClient();
@@ -63,8 +75,11 @@ export function useMempoolFeed(): MempoolFeedSnapshot {
         // Only overwrite a field when its fetch succeeded — otherwise keep
         // the last-known value so a single flaky upstream call doesn't blank
         // the mempool UI ("blip then empty" bug on intermittent 502s).
-        tipHeight: tip.status === "fulfilled" ? tip.value : prev.tipHeight,
-        blocks: blocks.status === "fulfilled" ? blocks.value : prev.blocks,
+        tipHeight:
+          tip.status === "fulfilled"
+            ? Math.max(Number(tip.value) || 0, prev.tipHeight ?? 0)
+            : prev.tipHeight,
+        blocks: blocks.status === "fulfilled" ? mergeBlocks(prev.blocks, blocks.value) : prev.blocks,
         mempool: mempool.status === "fulfilled" ? mempool.value : prev.mempool,
         mempoolBlocks:
           mempoolBlocks.status === "fulfilled" ? mempoolBlocks.value : prev.mempoolBlocks,
@@ -109,8 +124,9 @@ export function useMempoolFeed(): MempoolFeedSnapshot {
             data: ["blocks", "stats", "mempool-blocks", "live-2h-chart"],
           }));
           setSnap((p) => ({ ...p, status: "live" }));
-          // Still seed from REST so we have a full initial snapshot.
-          poll();
+          // Always keep polling REST too — the socket's upstream can go stale
+          // (it once froze at an old tip for hours while REST was current).
+          startPolling();
         });
 
         ws.addEventListener("message", (ev) => {
@@ -118,14 +134,17 @@ export function useMempoolFeed(): MempoolFeedSnapshot {
             const m = JSON.parse(typeof ev.data === "string" ? ev.data : "");
             setSnap((prev) => {
               const next = { ...prev, lastTick: Date.now(), status: "live" as FeedStatus };
-              if (m.block) {
-                next.blocks = [m.block, ...prev.blocks].slice(0, 15);
-                next.tipHeight = m.block.height ?? prev.tipHeight;
-                qc.invalidateQueries({ queryKey: ["mempool"], exact: false });
-              }
-              if (m.blocks && Array.isArray(m.blocks)) {
-                next.blocks = m.blocks;
-                next.tipHeight = m.blocks[0]?.height ?? prev.tipHeight;
+              const incoming: BlockSummary[] = [
+                ...(m.block ? [m.block] : []),
+                ...(Array.isArray(m.blocks) ? m.blocks : []),
+              ];
+              if (incoming.length) {
+                next.blocks = mergeBlocks(prev.blocks, incoming);
+                const top = next.blocks[0]?.height ?? null;
+                if (top != null && (prev.tipHeight == null || top > prev.tipHeight)) {
+                  next.tipHeight = top;
+                  if (m.block) qc.invalidateQueries({ queryKey: ["mempool"], exact: false });
+                }
               }
               if (m["mempool-blocks"]) next.mempoolBlocks = m["mempool-blocks"];
               if (m["mempoolInfo"]) {
