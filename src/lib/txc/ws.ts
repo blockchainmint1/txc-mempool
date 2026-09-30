@@ -175,7 +175,11 @@ export function useMempoolFeed(): MempoolFeedSnapshot {
       }
     }
 
-    tryWs();
+    // Single source of truth: the homepage reads the exact same endpoints as
+    // the /blocks page. The legacy socket (leftover container) is not used.
+    void tryWs;
+    setSnap((p) => ({ ...p, status: "live" }));
+    startPolling();
 
     return () => {
       cancelled = true;
