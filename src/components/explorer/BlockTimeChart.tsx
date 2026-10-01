@@ -55,7 +55,9 @@ export function BlockTimeChart() {
   const q = useQuery({
     queryKey: ["block-times", win],
     queryFn: async (): Promise<BlockTimeResponse> => {
-      const res = await fetch(`/api/v1/block-times?window=${win}`);
+      const res = await fetch(
+        win === "blocks" ? `/api/v1/block-times?mode=blocks` : `/api/v1/block-times?window=${win}`,
+      );
       if (!res.ok) throw new Error(`block-times ${res.status}`);
       return res.json();
     },
@@ -71,7 +73,7 @@ export function BlockTimeChart() {
 
   const xTickFormat = (t: number) => {
     const d = new Date(t * 1000);
-    if (win === "1d")
+    if (win === "blocks" || win === "1d")
       return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
     return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   };
