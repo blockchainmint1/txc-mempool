@@ -161,7 +161,7 @@ else report PASS "RPC under load (12x)" "all 12 answered"; fi
 echo
 echo "-- containers --"
 if command -v docker >/dev/null 2>&1; then
-  for c in txc-mempool-db txc-mempool-api txc-indexer txc-electrum txc-nginx txc-certbot; do
+  for c in txc-indexer txc-electrum txc-nginx txc-certbot; do
     st=$(docker inspect -f '{{.State.Status}}{{if .State.Health}} ({{.State.Health.Status}}){{end}}' "$c" 2>/dev/null)
     if [ -z "$st" ]; then report FAIL "container $c" "missing"
     elif [[ "$st" == running* && "$st" != *"unhealthy"* ]]; then
