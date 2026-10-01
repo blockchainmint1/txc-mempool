@@ -119,6 +119,51 @@ export const Route = createFileRoute("/api/v1/block-times")({
           return errorResponse("Upstream unavailable", 502);
         }
 
+        // Per-block mode: fetch the last N consecutive blocks and return one
+        // series point per block interval (no aggregation).
+        if (url.searchParams.get("mode") === "blocks") {
+          const CHUNKS = 7; // ~105 blocks
+          const starts = Array.from({ length: CHUNKS }, (_, i) => Math.max(1, tip - i * 15));
+          const chunks = (await mapWithConcurrency(starts, 8, fetchBlocksAt)).filter(
+            (c) => c.length > 1,
+          );
+          const allBlocks = chunks
+            .flat()
+            .sort((a, b) => a.height - b.height)
+            .filter((b, i, arr) => i === 0 || arr[i - 1].height !== b.height);
+          if (allBlocks.length < 2) return errorResponse("no block data returned from backend", 502);
+
+          const series = allBlocks.slice(1).map((b, i) => ({
+            timestamp: b.timestamp,
+            height: b.height,
+            avg: Math.max(0, b.timestamp - allBlocks[i].timestamp),
+          }));
+          const all = series.map((p) => p.avg).filter((d) => d < 24 * 3600);
+          const avg = all.reduce((a, b) => a + b, 0) / all.length;
+
+          return new Response(
+            JSON.stringify({
+              window: "blocks",
+              tipHeight: tip,
+              computedAt: Math.floor(Date.now() / 1000),
+              targetBlockTimeSec: TARGET_BLOCK_TIME_SEC,
+              avgBlockTimeSec: avg,
+              fastestSec: Math.min(...all),
+              slowestSec: Math.max(...all),
+              sampledIntervals: all.length,
+              series,
+            }),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "Cache-Control": "public, max-age=60, s-maxage=60",
+                ...CORS_HEADERS,
+              },
+            },
+          );
+        }
+
         const heights = sampleHeights(tip, WINDOW_TO_SAMPLE[windowParam]);
         const chunks = (await mapWithConcurrency(heights, 8, fetchBlocksAt)).filter(
           (c) => c.length > 1,
