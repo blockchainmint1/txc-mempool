@@ -34,6 +34,7 @@ import { Route as ApiV1RichlistRouteImport } from './routes/api/v1/richlist'
 import { Route as ApiV1PriceRouteImport } from './routes/api/v1/price'
 import { Route as ApiV1FeeEstimatesRouteImport } from './routes/api/v1/fee-estimates'
 import { Route as ApiV1DifficultyAdjustmentRouteImport } from './routes/api/v1/difficulty-adjustment'
+import { Route as ApiV1BlockTimesRouteImport } from './routes/api/v1/block-times'
 import { Route as ApiTxTxidRouteImport } from './routes/api/tx.$txid'
 import { Route as ApiPublicNotifyRouteImport } from './routes/api/public/notify'
 import { Route as ApiMempoolTxidsRouteImport } from './routes/api/mempool.txids'
@@ -203,6 +204,11 @@ const ApiV1DifficultyAdjustmentRoute =
     path: '/api/v1/difficulty-adjustment',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiV1BlockTimesRoute = ApiV1BlockTimesRouteImport.update({
+  id: '/api/v1/block-times',
+  path: '/api/v1/block-times',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTxTxidRoute = ApiTxTxidRouteImport.update({
   id: '/$txid',
   path: '/$txid',
@@ -441,6 +447,7 @@ export interface FileRoutesByFullPath {
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
   '/api/public/notify': typeof ApiPublicNotifyRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
+  '/api/v1/block-times': typeof ApiV1BlockTimesRoute
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
   '/api/v1/price': typeof ApiV1PriceRoute
@@ -509,6 +516,7 @@ export interface FileRoutesByTo {
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
   '/api/public/notify': typeof ApiPublicNotifyRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
+  '/api/v1/block-times': typeof ApiV1BlockTimesRoute
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
   '/api/v1/price': typeof ApiV1PriceRoute
@@ -579,6 +587,7 @@ export interface FileRoutesById {
   '/api/mempool/txids': typeof ApiMempoolTxidsRoute
   '/api/public/notify': typeof ApiPublicNotifyRoute
   '/api/tx/$txid': typeof ApiTxTxidRouteWithChildren
+  '/api/v1/block-times': typeof ApiV1BlockTimesRoute
   '/api/v1/difficulty-adjustment': typeof ApiV1DifficultyAdjustmentRoute
   '/api/v1/fee-estimates': typeof ApiV1FeeEstimatesRoute
   '/api/v1/price': typeof ApiV1PriceRoute
@@ -650,6 +659,7 @@ export interface FileRouteTypes {
     | '/api/mempool/txids'
     | '/api/public/notify'
     | '/api/tx/$txid'
+    | '/api/v1/block-times'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/fee-estimates'
     | '/api/v1/price'
@@ -718,6 +728,7 @@ export interface FileRouteTypes {
     | '/api/mempool/txids'
     | '/api/public/notify'
     | '/api/tx/$txid'
+    | '/api/v1/block-times'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/fee-estimates'
     | '/api/v1/price'
@@ -787,6 +798,7 @@ export interface FileRouteTypes {
     | '/api/mempool/txids'
     | '/api/public/notify'
     | '/api/tx/$txid'
+    | '/api/v1/block-times'
     | '/api/v1/difficulty-adjustment'
     | '/api/v1/fee-estimates'
     | '/api/v1/price'
@@ -855,6 +867,7 @@ export interface RootRouteChildren {
   ApiBlocksStartHeightRoute: typeof ApiBlocksStartHeightRoute
   ApiMempoolTxidsRoute: typeof ApiMempoolTxidsRoute
   ApiPublicNotifyRoute: typeof ApiPublicNotifyRoute
+  ApiV1BlockTimesRoute: typeof ApiV1BlockTimesRoute
   ApiV1DifficultyAdjustmentRoute: typeof ApiV1DifficultyAdjustmentRoute
   ApiV1FeeEstimatesRoute: typeof ApiV1FeeEstimatesRoute
   ApiV1PriceRoute: typeof ApiV1PriceRoute
@@ -1058,6 +1071,13 @@ declare module '@tanstack/react-router' {
       path: '/api/v1/difficulty-adjustment'
       fullPath: '/api/v1/difficulty-adjustment'
       preLoaderRoute: typeof ApiV1DifficultyAdjustmentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/block-times': {
+      id: '/api/v1/block-times'
+      path: '/api/v1/block-times'
+      fullPath: '/api/v1/block-times'
+      preLoaderRoute: typeof ApiV1BlockTimesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/tx/$txid': {
@@ -1494,6 +1514,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBlocksStartHeightRoute: ApiBlocksStartHeightRoute,
   ApiMempoolTxidsRoute: ApiMempoolTxidsRoute,
   ApiPublicNotifyRoute: ApiPublicNotifyRoute,
+  ApiV1BlockTimesRoute: ApiV1BlockTimesRoute,
   ApiV1DifficultyAdjustmentRoute: ApiV1DifficultyAdjustmentRoute,
   ApiV1FeeEstimatesRoute: ApiV1FeeEstimatesRoute,
   ApiV1PriceRoute: ApiV1PriceRoute,

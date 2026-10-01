@@ -8,6 +8,7 @@ import { FeeGauge } from "@/components/explorer/FeeGauge";
 import { StatTile } from "@/components/explorer/StatTile";
 import { SearchBar } from "@/components/explorer/SearchBar";
 import { NetworkDifficultyChart } from "@/components/explorer/NetworkDifficultyChart";
+import { BlockTimeChart } from "@/components/explorer/BlockTimeChart";
 import { formatBytes, formatNumber, satsToTxc, shortHash, timeAgo } from "@/lib/txc/format";
 import { Activity, Clock, Zap } from "lucide-react";
 
@@ -70,6 +71,8 @@ function Dashboard() {
       </section>
 
       <NetworkDifficultyChart />
+
+      <BlockTimeChart />
 
       {/* Mempool + confirmed strips */}
       <section className="grid lg:grid-cols-2 gap-6">
