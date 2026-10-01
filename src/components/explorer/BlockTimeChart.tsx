@@ -22,14 +22,16 @@ interface BlockTimeResponse {
   series: BlockTimePoint[];
 }
 
-type Window = "1d" | "7d" | "30d";
+type Window = "blocks" | "1d" | "7d" | "30d";
 const WINDOWS: { value: Window; label: string }[] = [
+  { value: "blocks", label: "Per block" },
   { value: "1d", label: "1D" },
   { value: "7d", label: "7D" },
   { value: "30d", label: "30D" },
 ];
 
 const WINDOW_LABEL: Record<Window, string> = {
+  blocks: "last ~105 blocks",
   "1d": "24h",
   "7d": "7d",
   "30d": "30d",
