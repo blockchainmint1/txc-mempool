@@ -122,22 +122,32 @@ export const Route = createFileRoute("/api/v1/block-times")({
         // Per-block mode: fetch the last N consecutive blocks and return one
         // series point per block interval (no aggregation).
         if (url.searchParams.get("mode") === "blocks") {
-          const CHUNKS = 7; // ~105 blocks
-          const starts = Array.from({ length: CHUNKS }, (_, i) => Math.max(1, tip - i * 15));
-          const chunks = (await mapWithConcurrency(starts, 8, fetchBlocksAt)).filter(
-            (c) => c.length > 1,
-          );
-          const allBlocks = chunks
-            .flat()
-            .sort((a, b) => a.height - b.height)
-            .filter((b, i, arr) => i === 0 || arr[i - 1].height !== b.height);
+          // Walk backwards contiguously: each request starts just below the
+          // lowest height the previous one returned, so no blocks are skipped.
+          const TARGET_BLOCKS = 106;
+          const byHeight = new Map<number, BlockHeaderLite>();
+          let next = tip;
+          for (let req = 0; req < 20 && byHeight.size < TARGET_BLOCKS && next >= 1; req++) {
+            const chunk = await fetchBlocksAt(next);
+            if (chunk.length === 0) break;
+            for (const b of chunk) byHeight.set(b.height, b);
+            const lowest = Math.min(...chunk.map((b) => b.height));
+            if (lowest >= next + 1) break;
+            next = lowest - 1;
+          }
+          const allBlocks = [...byHeight.values()].sort((a, b) => a.height - b.height);
           if (allBlocks.length < 2) return errorResponse("no block data returned from backend", 502);
 
-          const series = allBlocks.slice(1).map((b, i) => ({
-            timestamp: b.timestamp,
-            height: b.height,
-            avg: Math.max(0, b.timestamp - allBlocks[i].timestamp),
-          }));
+          // Only measure intervals between truly consecutive heights.
+          const series = allBlocks
+            .slice(1)
+            .map((b, i) => ({ b, prev: allBlocks[i] }))
+            .filter(({ b, prev }) => b.height === prev.height + 1)
+            .map(({ b, prev }) => ({
+              timestamp: b.timestamp,
+              height: b.height,
+              avg: Math.max(0, b.timestamp - prev.timestamp),
+            }));
           const all = series.map((p) => p.avg).filter((d) => d < 24 * 3600);
           const avg = all.reduce((a, b) => a + b, 0) / all.length;
 
