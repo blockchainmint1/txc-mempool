@@ -8,8 +8,10 @@ import {
 interface BlockTimePoint {
   timestamp: number;
   avg: number;
-  min: number;
-  max: number;
+  min?: number;
+  max?: number;
+  /** Present only in per-block mode. */
+  height?: number;
 }
 
 interface BlockTimeResponse {
