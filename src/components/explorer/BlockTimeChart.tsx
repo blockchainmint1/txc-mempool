@@ -179,7 +179,11 @@ export function BlockTimeChart() {
                   fontFamily: "var(--font-mono)",
                   fontSize: 11,
                 }}
-                labelFormatter={(l) => new Date((l as number) * 1000).toLocaleString()}
+                labelFormatter={(l, payload) => {
+                  const time = new Date((l as number) * 1000).toLocaleString();
+                  const p = (payload?.[0]?.payload ?? {}) as Partial<BlockTimePoint>;
+                  return p.height != null ? `Block #${p.height.toLocaleString()} · ${time}` : time;
+                }}
                 formatter={(v: number, name: string) => [
                   formatDuration(v),
                   name === "avg" ? "avg block time" : name,
