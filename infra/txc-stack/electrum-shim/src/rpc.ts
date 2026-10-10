@@ -77,7 +77,7 @@ export const estimateSmartFee = (target: number) =>
   rpc<{ feerate?: number; errors?: string[] }>("estimatesmartfee", [target, "CONSERVATIVE"]);
 
 export const getMempoolInfo = () =>
-  rpc<{ mempoolminfee: number; minrelaytxfee: number }>("getmempoolinfo");
+  rpc<{ mempoolminfee: number; minrelaytxfee: number; bytes?: number }>("getmempoolinfo");
 
 export const getBlockVerbose1 = (hash: string) =>
   rpc<{ height: number; tx: string[] }>("getblock", [hash, 1]);

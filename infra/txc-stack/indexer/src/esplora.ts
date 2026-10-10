@@ -948,19 +948,33 @@ app.get("/v1/fees/mempool-blocks", async (_req, reply) => {
   try { return reply.send(await mempoolBlocks()); } catch { return reply.send([]); }
 });
 
+// Fee recommendations are based on what is waiting in the mempool *right now*,
+// not on the node's estimatesmartfee. estimatesmartfee looks backwards at fees
+// recent txs happened to pay; on a chain with mostly-empty blocks one batch of
+// over-paying txs makes it recommend that rate for days, even though a
+// minimum-fee tx would confirm in the very next block.
+//
+// Rule: if a projected block isn't full, anything at the relay floor gets in,
+// so that tier = floor. Only when a projected block is full do you have to
+// outbid the cheapest tx in it.
 const feesRecommended = memo(15_000, async () => {
   const info = await getMempoolInfo().catch(() => null);
   const floor = feerateTxcKvbToSatVb(Math.max(info?.mempoolminfee ?? 0, info?.minrelaytxfee ?? 0)) ?? 1;
-  const est = async (t: number) => {
-    try { return Math.max(feerateTxcKvbToSatVb((await estimateSmartFee(t)).feerate) ?? floor, floor); }
-    catch { return floor; }
+  const blocks = await mempoolBlocks().catch(() => []);
+  const need = (i: number) => {
+    const b = blocks[i];
+    if (!b || b.blockVSize < MAX_BLOCK_VSIZE * 0.95) return floor;
+    return Math.max(floor, (b.feeRange[0] ?? floor) + 1);
   };
-  const f1 = await est(1), f3 = await est(3), f6 = await est(6), f144 = await est(144);
+  const fastest = need(0);
+  const halfHour = Math.min(fastest, need(2));
+  const hour = Math.min(halfHour, need(5));
+  const economy = Math.min(hour, need(7));
   return {
-    fastestFee: round2(f1),
-    halfHourFee: round2(Math.min(f1, f3)),
-    hourFee: round2(Math.min(f1, f3, f6)),
-    economyFee: round2(Math.min(f1, f3, f6, f144)),
+    fastestFee: round2(fastest),
+    halfHourFee: round2(halfHour),
+    hourFee: round2(hour),
+    economyFee: round2(economy),
     minimumFee: round2(floor),
   };
 });
