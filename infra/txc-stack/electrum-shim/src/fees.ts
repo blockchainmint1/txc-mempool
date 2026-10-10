@@ -23,6 +23,11 @@ const inflight = new Set<number>();
 
 let relayFee = FLOOR;
 let relayAt = 0;
+// Mempool size in bytes. While it fits in one block, the relay floor confirms
+// next block, so we answer with the floor instead of estimatesmartfee (which
+// looks backwards and stays inflated for days after a burst of high-fee txs).
+let mempoolBytes = 0;
+const BLOCK_BYTES = 950_000;
 
 /** sat/kB -> TXC/kB, Electrum's estimatefee unit. */
 function normalize(txcPerKvB: number | undefined): number {
@@ -34,6 +39,7 @@ async function refreshRelayFee(): Promise<number> {
   const info = await getMempoolInfo().catch(() => null);
   const floor = Math.max(info?.mempoolminfee ?? 0, info?.minrelaytxfee ?? 0, FLOOR);
   relayFee = Number(floor.toFixed(8));
+  if (info) mempoolBytes = info.bytes ?? 0;
   relayAt = Date.now();
   return relayFee;
 }
@@ -65,6 +71,8 @@ function refresh(target: number): Promise<void> {
  * stale cache hit while a refresh runs, or the relay floor on a cold cache.
  */
 export async function getFeeEstimate(target: number): Promise<number> {
+  const floor = await getRelayFee();
+  if (mempoolBytes < BLOCK_BYTES) return floor;
   const hit = cache.get(target);
   if (hit) {
     if (Date.now() - hit.at > TTL_MS) void refresh(target);
