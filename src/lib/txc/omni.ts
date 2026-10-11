@@ -271,6 +271,7 @@ export function omniLabel(m: OmniMessage): string {
   switch (m.kind) {
     case "simple-send": return `Omni Simple Send #${m.propertyId}`;
     case "send-all": return `Omni Send All (eco ${m.ecosystem})`;
+    case "send-to-many": return `Omni Send to Many #${m.propertyId} (${m.outputs.length} recipients)`;
     case "create-fixed": return `Omni Issuance — Fixed "${m.name}" #${m.previousPropertyId || "new"}`;
     case "create-managed": return `Omni Issuance — Managed "${m.name}"`;
     case "grant": return `Omni Grant #${m.propertyId}`;
