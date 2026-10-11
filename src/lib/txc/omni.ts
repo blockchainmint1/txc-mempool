@@ -14,6 +14,7 @@ import type { TxVout } from "./esplora";
 export type OmniMessage =
   | { kind: "simple-send"; version: number; propertyId: number; amount: bigint }
   | { kind: "send-all"; version: number; ecosystem: number }
+  | { kind: "send-to-many"; version: number; propertyId: number; outputs: Array<{ vout: number; amount: bigint }> }
   | {
       kind: "create-fixed";
       version: number;
@@ -122,6 +123,18 @@ function decodeOmni(p: Uint8Array): OmniMessage {
         // Send All: u8 ecosystem
         const ecosystem = body[0] ?? 1;
         return { kind: "send-all", version, ecosystem };
+      }
+      case 7: {
+        // Send to Many: u32 propertyId, u8 count, [u8 vout, u64 amount]*
+        const propertyId = readU32(body, 0);
+        const count = body[4] ?? 0;
+        const outputs: Array<{ vout: number; amount: bigint }> = [];
+        for (let i = 0; i < count; i++) {
+          const o = 5 + i * 9;
+          if (o + 9 > body.length) break;
+          outputs.push({ vout: body[o], amount: readU64(body, o + 1) });
+        }
+        return { kind: "send-to-many", version, propertyId, outputs };
       }
       case 50: {
         // Create Property Fixed
