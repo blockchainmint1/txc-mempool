@@ -123,7 +123,7 @@ function VinRow({ v, index }: { v: TxVin; index: number }) {
   );
 }
 
-function VoutRow({ o, index }: { o: TxVout; index: number }) {
+function VoutRow({ o, index, allVouts }: { o: TxVout; index: number; allVouts: TxVout[] }) {
   const [open, setOpen] = useState(false);
   const opReturn = isOpReturn(o);
   const decoded = opReturn ? decodeOpReturn(o.scriptpubkey) : null;
@@ -179,7 +179,7 @@ function VoutRow({ o, index }: { o: TxVout; index: number }) {
           <DetailRow label="ScriptPubKey (ASM)" value={<ScriptAsm asm={o.scriptpubkey_asm} />} />
           <DetailRow label="ScriptPubKey (HEX)" value={o.scriptpubkey} />
           {opReturn && decoded?.kind === "omni" && (
-            <DetailRow label="Omni" value={<OmniDetail msg={decoded.message} />} mono={false} />
+            <DetailRow label="Omni" value={<OmniDetail msg={decoded.message} vouts={allVouts} />} mono={false} />
           )}
           {opReturn && decoded?.kind === "text" && (
             <DetailRow label="UTF-8" value={<>"{decoded.text}"</>} />
@@ -248,7 +248,7 @@ export function TxFlow({ tx }: { tx: Tx }) {
           Outputs ({tx.vout.length})
         </div>
         <div className="space-y-2">
-          {tx.vout.map((o, i) => <VoutRow key={i} o={o} index={i} />)}
+          {tx.vout.map((o, i) => <VoutRow key={i} o={o} index={i} allVouts={tx.vout} />)}
         </div>
       </div>
     </div>
