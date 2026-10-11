@@ -21,6 +21,8 @@ import {
   type RpcTx,
 } from "./rpc.js";
 
+import { addressTokens, addressOmniTxs, listProperties, propertyHolders, omniStatus } from "./omni.js";
+
 const PORT = Number(process.env.HTTP_PORT ?? 3001);
 
 const app = Fastify({ logger: false });
@@ -255,6 +257,21 @@ app.get<{ Params: { txid: string } }>("/tx/:txid/hex", async ({ params }, reply)
     return reply.code(404).type("text/plain").send(msg);
   }
 });
+
+// ---- Omni-Layer tokens ----
+app.get("/address/_omni/status", async () => omniStatus());
+app.get("/address/_tokens", async () => ({ ...omniStatus(), properties: listProperties() }));
+app.get<{ Params: { id: string }; Querystring: { limit?: string } }>("/address/_token/:id", async (req, reply) => {
+  const r = propertyHolders(Number(req.params.id), Math.min(1000, Number(req.query.limit ?? 100) || 100));
+  if (!r) return reply.code(404).send({ error: "unknown property" });
+  return { ...omniStatus(), ...r };
+});
+app.get<{ Params: { addr: string } }>("/address/:addr/tokens", async (req) => ({
+  address: req.params.addr, ...omniStatus(), tokens: addressTokens(req.params.addr),
+}));
+app.get<{ Params: { addr: string } }>("/address/:addr/token-txs", async (req) => ({
+  address: req.params.addr, ...omniStatus(), txs: addressOmniTxs(req.params.addr),
+}));
 
 // GET /address/_status — indexer sync status, reachable via nginx /api/address/_status
 app.get("/address/_status", async () => ({
