@@ -222,7 +222,20 @@ function apply(type: number, b: Uint8Array, sender: string, reference: string | 
     }
     case 50: case 51: case 54: { // create fixed / crowdsale / managed
       const c = readCreate(b);
-      const eco = c.ecosystem === 2 ? 2 : 1;
+      // Omni Core validity rules: ecosystem must be 1 (main) or 2 (test),
+      // property type must be 1 (indivisible) or 2 (divisible), the name must
+      // be non-empty, and no property with the same name may already exist in
+      // that ecosystem. Invalid creations consume NO property id.
+      if (c.ecosystem !== 1 && c.ecosystem !== 2)
+        return { type, valid: false, reason: "invalid ecosystem", touched: [] };
+      if (c.propertyType !== 1 && c.propertyType !== 2)
+        return { type, valid: false, reason: "invalid property type", touched: [] };
+      if (!c.name)
+        return { type, valid: false, reason: "empty name", touched: [] };
+      const dup = db.prepare("SELECT id FROM omni_properties WHERE ecosystem = ? AND name = ?").get(c.ecosystem, c.name);
+      if (dup)
+        return { type, valid: false, reason: "duplicate property name", touched: [] };
+      const eco = c.ecosystem;
       const pid = nextPropertyId(eco);
       insProp.run(pid, eco, c.propertyType === 2 ? 1 : 0, type === 54 ? 1 : 0, c.name, c.category, c.subcategory, c.url, c.data, sender, txid, height);
       if (type === 50) credit(height, txid, sender, pid, u64(b, c.cursor));
