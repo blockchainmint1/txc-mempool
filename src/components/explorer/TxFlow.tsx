@@ -190,7 +190,7 @@ function VoutRow({ o, index, allVouts }: { o: TxVout; index: number; allVouts: T
   );
 }
 
-function OmniDetail({ msg }: { msg: OmniMessage }) {
+function OmniDetail({ msg, vouts }: { msg: OmniMessage; vouts?: TxVout[] }) {
   switch (msg.kind) {
     case "simple-send":
       return (
@@ -199,6 +199,30 @@ function OmniDetail({ msg }: { msg: OmniMessage }) {
           <div>Amount: <span className="text-foreground">{msg.amount.toString()}</span></div>
         </div>
       );
+    case "send-to-many": {
+      const total = msg.outputs.reduce((a, o) => a + o.amount, 0n);
+      return (
+        <div className="space-y-0.5 font-mono text-[11px]">
+          <div>Property: <span className="text-foreground">#{msg.propertyId}</span></div>
+          <div>Recipients: <span className="text-foreground">{msg.outputs.length}</span> — Total: <span className="text-foreground">{total.toString()}</span></div>
+          <div className="pt-1 space-y-0.5">
+            {msg.outputs.map((out, i) => {
+              const addr = vouts?.[out.vout]?.scriptpubkey_address;
+              return (
+                <div key={i} className="flex items-baseline gap-2">
+                  {addr ? (
+                    <Link to="/address/$addr" params={{ addr }} className="text-accent hover:text-primary truncate">{addr}</Link>
+                  ) : (
+                    <span className="text-muted-foreground">vout #{out.vout}</span>
+                  )}
+                  <span className="text-foreground flex-shrink-0">{out.amount.toString()}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
     case "grant":
     case "revoke":
       return (
