@@ -68,7 +68,7 @@ const START = Number(process.env.OMNI_START_HEIGHT ?? 0);
 // Bump whenever the decode/validity rules change in a way that makes existing
 // scanned data wrong. On startup, a mismatch wipes all omni tables and the
 // scanner rebuilds from START.
-const SCAN_VERSION = "4";
+const SCAN_VERSION = "5";
 {
   const v = db.prepare("SELECT value FROM meta WHERE key = 'omni_version'").get() as { value: string } | undefined;
   if (v?.value !== SCAN_VERSION) {
