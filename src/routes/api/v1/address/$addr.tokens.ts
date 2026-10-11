@@ -1,0 +1,19 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { proxy } from "@/lib/api/backend";
+import { optionsHandler, errorResponse } from "@/lib/api/cors";
+
+// Omni-Layer token balances held by one address. `_omni`, `_token` and
+// `_tokens` are literal route segments, so they never collide with $addr.
+const isAddr = (a: string) => /^[A-Za-z0-9]{14,120}$/.test(a);
+
+export const Route = createFileRoute("/api/v1/address/$addr/tokens")({
+  server: {
+    handlers: {
+      OPTIONS: optionsHandler,
+      GET: async ({ params }) => {
+        if (!isAddr(params.addr)) return errorResponse("Invalid address", 400);
+        return proxy(`/v1/address/${params.addr}/tokens`, { cacheSeconds: 5 });
+      },
+    },
+  },
+});
