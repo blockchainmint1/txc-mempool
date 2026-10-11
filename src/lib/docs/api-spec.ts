@@ -44,6 +44,11 @@ export const REST_GROUPS: EndpointGroup[] = [
     description: "Balance, UTXOs, transaction history.",
     endpoints: [
       { method: "GET", path: "/api/v1/address/:addr", summary: "Address summary: chain_stats + mempool_stats." },
+      { method: "GET", path: "/api/v1/address/:addr/tokens", summary: "Omni-Layer token balances held by this address (property id, name, balance)." },
+      { method: "GET", path: "/api/v1/address/:addr/token-txs", summary: "Recent Omni-Layer token transactions touching this address, with valid/invalid status." },
+      { method: "GET", path: "/api/v1/address/_tokens", summary: "All known Omni-Layer tokens (properties) with holder counts." },
+      { method: "GET", path: "/api/v1/address/_token/:id?limit=100", summary: "One token's details plus its top holders." },
+      { method: "GET", path: "/api/v1/address/_omni/status", summary: "Token scanner progress (scanned height vs indexed tip)." },
       { method: "GET", path: "/api/v1/address/:addr/utxo", summary: "Unspent outputs at this address." },
       { method: "GET", path: "/api/v1/address/:addr/txs", summary: "Most recent transactions involving this address." },
       { method: "GET", path: "/api/v1/address/:addr/balance-history?bucket=day&limit=400",

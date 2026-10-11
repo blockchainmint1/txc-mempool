@@ -13,6 +13,7 @@ import { UtxoBubbleChart } from "@/components/address/UtxoBubbleChart";
 import { ActivityHeatmap } from "@/components/address/ActivityHeatmap";
 import { CounterpartiesPanel } from "@/components/address/CounterpartiesPanel";
 import { isOpReturn } from "@/lib/txc/omni";
+import { TokenBalances } from "@/components/address/TokenBalances";
 
 type Filter = "all" | "received" | "sent" | "omni" | "coinbase";
 
@@ -160,6 +161,8 @@ function AddressPage() {
           )}
         </div>
       </div>
+
+      <TokenBalances address={addr} />
 
       {/* BALANCE HISTORY */}
       {allTxs.length > 0 && (
