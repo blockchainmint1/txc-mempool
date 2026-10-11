@@ -123,7 +123,7 @@ function VinRow({ v, index }: { v: TxVin; index: number }) {
   );
 }
 
-function VoutRow({ o, index }: { o: TxVout; index: number }) {
+function VoutRow({ o, index, allVouts }: { o: TxVout; index: number; allVouts: TxVout[] }) {
   const [open, setOpen] = useState(false);
   const opReturn = isOpReturn(o);
   const decoded = opReturn ? decodeOpReturn(o.scriptpubkey) : null;
@@ -179,7 +179,7 @@ function VoutRow({ o, index }: { o: TxVout; index: number }) {
           <DetailRow label="ScriptPubKey (ASM)" value={<ScriptAsm asm={o.scriptpubkey_asm} />} />
           <DetailRow label="ScriptPubKey (HEX)" value={o.scriptpubkey} />
           {opReturn && decoded?.kind === "omni" && (
-            <DetailRow label="Omni" value={<OmniDetail msg={decoded.message} />} mono={false} />
+            <DetailRow label="Omni" value={<OmniDetail msg={decoded.message} vouts={allVouts} />} mono={false} />
           )}
           {opReturn && decoded?.kind === "text" && (
             <DetailRow label="UTF-8" value={<>"{decoded.text}"</>} />
@@ -190,7 +190,7 @@ function VoutRow({ o, index }: { o: TxVout; index: number }) {
   );
 }
 
-function OmniDetail({ msg }: { msg: OmniMessage }) {
+function OmniDetail({ msg, vouts }: { msg: OmniMessage; vouts?: TxVout[] }) {
   switch (msg.kind) {
     case "simple-send":
       return (
@@ -199,6 +199,30 @@ function OmniDetail({ msg }: { msg: OmniMessage }) {
           <div>Amount: <span className="text-foreground">{msg.amount.toString()}</span></div>
         </div>
       );
+    case "send-to-many": {
+      const total = msg.outputs.reduce((a, o) => a + o.amount, 0n);
+      return (
+        <div className="space-y-0.5 font-mono text-[11px]">
+          <div>Property: <span className="text-foreground">#{msg.propertyId}</span></div>
+          <div>Recipients: <span className="text-foreground">{msg.outputs.length}</span> — Total: <span className="text-foreground">{total.toString()}</span></div>
+          <div className="pt-1 space-y-0.5">
+            {msg.outputs.map((out, i) => {
+              const addr = vouts?.[out.vout]?.scriptpubkey_address;
+              return (
+                <div key={i} className="flex items-baseline gap-2">
+                  {addr ? (
+                    <Link to="/address/$addr" params={{ addr }} className="text-accent hover:text-primary truncate">{addr}</Link>
+                  ) : (
+                    <span className="text-muted-foreground">vout #{out.vout}</span>
+                  )}
+                  <span className="text-foreground flex-shrink-0">{out.amount.toString()}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
     case "grant":
     case "revoke":
       return (
@@ -248,7 +272,7 @@ export function TxFlow({ tx }: { tx: Tx }) {
           Outputs ({tx.vout.length})
         </div>
         <div className="space-y-2">
-          {tx.vout.map((o, i) => <VoutRow key={i} o={o} index={i} />)}
+          {tx.vout.map((o, i) => <VoutRow key={i} o={o} index={i} allVouts={tx.vout} />)}
         </div>
       </div>
     </div>
