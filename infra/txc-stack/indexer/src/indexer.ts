@@ -14,6 +14,7 @@ import {
   type RpcBlock,
 } from "./rpc.js";
 import { db, getBlockHashAt, getTipHeight } from "./db.js";
+import { rollbackOmni } from "./omni.js";
 
 const POLL_MS = Number(process.env.POLL_MS ?? 5_000);
 const MEMPOOL_REFRESH_MS = Number(process.env.MEMPOOL_REFRESH_MS ?? 15_000);
@@ -124,6 +125,7 @@ async function syncOnce(): Promise<void> {
     const nodeHash = await getBlockHash(localHeight).catch(() => null);
     if (nodeHash && nodeHash === localHash) break;
     console.log(`[indexer] reorg at ${localHeight}, rolling back`);
+    rollbackOmni(localHeight);
     rollback(localHeight);
     localHeight--;
   }
