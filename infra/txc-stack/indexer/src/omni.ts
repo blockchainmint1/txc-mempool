@@ -64,6 +64,23 @@ db.exec(`
 
 const META_KEY = "omni_height";
 const START = Number(process.env.OMNI_START_HEIGHT ?? 0);
+
+// Bump whenever the decode/validity rules change in a way that makes existing
+// scanned data wrong. On startup, a mismatch wipes all omni tables and the
+// scanner rebuilds from START.
+const SCAN_VERSION = "2";
+{
+  const v = db.prepare("SELECT value FROM meta WHERE key = 'omni_version'").get() as { value: string } | undefined;
+  if (v?.value !== SCAN_VERSION) {
+    for (const t of ["omni_balances", "omni_ledger", "omni_properties", "omni_issuer_changes", "omni_txs", "omni_tx_addresses"]) {
+      db.prepare(`DELETE FROM ${t}`).run();
+    }
+    db.prepare("DELETE FROM meta WHERE key = ?").run(META_KEY);
+    db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('omni_version', ?)").run(SCAN_VERSION);
+    console.log(`[omni] scan version ${SCAN_VERSION}: wiped omni tables, rescanning from ${START}`);
+  }
+}
+
 export function getOmniHeight(): number {
   const r = db.prepare("SELECT value FROM meta WHERE key = ?").get(META_KEY) as { value: string } | undefined;
   return r ? Number(r.value) : START - 1;
@@ -222,7 +239,20 @@ function apply(type: number, b: Uint8Array, sender: string, reference: string | 
     }
     case 50: case 51: case 54: { // create fixed / crowdsale / managed
       const c = readCreate(b);
-      const eco = c.ecosystem === 2 ? 2 : 1;
+      // Omni Core validity rules: ecosystem must be 1 (main) or 2 (test),
+      // property type must be 1 (indivisible) or 2 (divisible), the name must
+      // be non-empty, and no property with the same name may already exist in
+      // that ecosystem. Invalid creations consume NO property id.
+      if (c.ecosystem !== 1 && c.ecosystem !== 2)
+        return { type, valid: false, reason: "invalid ecosystem", touched: [] };
+      if (c.propertyType !== 1 && c.propertyType !== 2)
+        return { type, valid: false, reason: "invalid property type", touched: [] };
+      if (!c.name)
+        return { type, valid: false, reason: "empty name", touched: [] };
+      const dup = db.prepare("SELECT id FROM omni_properties WHERE ecosystem = ? AND name = ?").get(c.ecosystem, c.name);
+      if (dup)
+        return { type, valid: false, reason: "duplicate property name", touched: [] };
+      const eco = c.ecosystem;
       const pid = nextPropertyId(eco);
       insProp.run(pid, eco, c.propertyType === 2 ? 1 : 0, type === 54 ? 1 : 0, c.name, c.category, c.subcategory, c.url, c.data, sender, txid, height);
       if (type === 50) credit(height, txid, sender, pid, u64(b, c.cursor));
