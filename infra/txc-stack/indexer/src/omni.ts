@@ -68,7 +68,7 @@ const START = Number(process.env.OMNI_START_HEIGHT ?? 0);
 // Bump whenever the decode/validity rules change in a way that makes existing
 // scanned data wrong. On startup, a mismatch wipes all omni tables and the
 // scanner rebuilds from START.
-const SCAN_VERSION = "3";
+const SCAN_VERSION = "4";
 {
   const v = db.prepare("SELECT value FROM meta WHERE key = 'omni_version'").get() as { value: string } | undefined;
   if (v?.value !== SCAN_VERSION) {
@@ -171,16 +171,15 @@ function processTx(tx: RpcTx, height: number): void {
   }
   if (!payload) return;
 
-  // Sender = address contributing the largest total input value.
-  const contrib = new Map<string, number>();
-  for (const vi of tx.vin) {
-    if (!vi.txid || vi.vout === undefined) continue;
-    const prev = getPrevOut.get(vi.txid, vi.vout) as { address: string | null; value: number } | undefined;
-    if (prev?.address) contrib.set(prev.address, (contrib.get(prev.address) ?? 0) + prev.value);
-  }
+  // Sender = address of the FIRST input (Omni Core / tokens.texitcoin.org rule).
+  // The old "largest contributing input" rule misattributed sends whenever a
+  // wallet topped up fees from a bigger UTXO at another address.
   let sender: string | null = null;
-  let best = -1;
-  for (const [a, v] of contrib) if (v > best) { best = v; sender = a; }
+  const vi0 = tx.vin[0];
+  if (vi0?.txid && vi0.vout !== undefined) {
+    const prev = getPrevOut.get(vi0.txid, vi0.vout) as { address: string | null; value: number } | undefined;
+    sender = prev?.address ?? null;
+  }
 
   // Reference = last addressed output not paying the sender; else last addressed output.
   const addressed = tx.vout.map((v) => ({ n: v.n, addr: voutAddress(v), sats: txcToSats(v.value) })).filter((x) => x.addr);
