@@ -53,6 +53,7 @@ import { Route as ApiTxTxidHexRouteImport } from './routes/api/tx.$txid.hex'
 import { Route as ApiTxTxidOutspendsRouteImport } from './routes/api/tx.$txid.outspends'
 import { Route as ApiTxTxidStatusRouteImport } from './routes/api/tx.$txid.status'
 import { Route as ApiV1AddressAddrRouteImport } from './routes/api/v1/address.$addr'
+import { Route as ApiV1AddressTokensRouteImport } from './routes/api/v1/address/[_]tokens'
 import { Route as ApiV1BlockHeightHeightRouteImport } from './routes/api/v1/block-height.$height'
 import { Route as ApiV1BlockHashRouteImport } from './routes/api/v1/block.$hash'
 import { Route as ApiV1BlocksIndexRouteImport } from './routes/api/v1/blocks.index'
@@ -66,8 +67,12 @@ import { Route as ApiV1MiningHashrateRouteImport } from './routes/api/v1/mining.
 import { Route as ApiV1TxIndexRouteImport } from './routes/api/v1/tx.index'
 import { Route as ApiV1TxTxidRouteImport } from './routes/api/v1/tx.$txid'
 import { Route as ApiV1AddressAddrBalanceHistoryRouteImport } from './routes/api/v1/address.$addr.balance-history'
+import { Route as ApiV1AddressAddrTokenTxsRouteImport } from './routes/api/v1/address/$addr.token-txs'
+import { Route as ApiV1AddressAddrTokensRouteImport } from './routes/api/v1/address/$addr.tokens'
 import { Route as ApiV1AddressAddrTxsRouteImport } from './routes/api/v1/address.$addr.txs'
 import { Route as ApiV1AddressAddrUtxoRouteImport } from './routes/api/v1/address.$addr.utxo'
+import { Route as ApiV1AddressOmniStatusRouteImport } from './routes/api/v1/address/[_]omni.status'
+import { Route as ApiV1AddressTokenIdRouteImport } from './routes/api/v1/address/[_]token.$id'
 import { Route as ApiV1BlockHashTxidsRouteImport } from './routes/api/v1/block.$hash.txids'
 import { Route as ApiV1BlockHashTxsRouteImport } from './routes/api/v1/block.$hash.txs'
 import { Route as ApiV1BlocksTipHashRouteImport } from './routes/api/v1/blocks.tip.hash'
@@ -300,6 +305,11 @@ const ApiV1AddressAddrRoute = ApiV1AddressAddrRouteImport.update({
   path: '/api/v1/address/$addr',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiV1AddressTokensRoute = ApiV1AddressTokensRouteImport.update({
+  id: '/api/v1/address/_tokens',
+  path: '/api/v1/address/_tokens',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiV1BlockHeightHeightRoute = ApiV1BlockHeightHeightRouteImport.update({
   id: '/api/v1/block-height/$height',
   path: '/api/v1/block-height/$height',
@@ -366,6 +376,17 @@ const ApiV1AddressAddrBalanceHistoryRoute =
     path: '/balance-history',
     getParentRoute: () => ApiV1AddressAddrRoute,
   } as any)
+const ApiV1AddressAddrTokenTxsRoute =
+  ApiV1AddressAddrTokenTxsRouteImport.update({
+    id: '/token-txs',
+    path: '/token-txs',
+    getParentRoute: () => ApiV1AddressAddrRoute,
+  } as any)
+const ApiV1AddressAddrTokensRoute = ApiV1AddressAddrTokensRouteImport.update({
+  id: '/tokens',
+  path: '/tokens',
+  getParentRoute: () => ApiV1AddressAddrRoute,
+} as any)
 const ApiV1AddressAddrTxsRoute = ApiV1AddressAddrTxsRouteImport.update({
   id: '/txs',
   path: '/txs',
@@ -375,6 +396,16 @@ const ApiV1AddressAddrUtxoRoute = ApiV1AddressAddrUtxoRouteImport.update({
   id: '/utxo',
   path: '/utxo',
   getParentRoute: () => ApiV1AddressAddrRoute,
+} as any)
+const ApiV1AddressOmniStatusRoute = ApiV1AddressOmniStatusRouteImport.update({
+  id: '/api/v1/address/_omni/status',
+  path: '/api/v1/address/_omni/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV1AddressTokenIdRoute = ApiV1AddressTokenIdRouteImport.update({
+  id: '/api/v1/address/_token/$id',
+  path: '/api/v1/address/_token/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiV1BlockHashTxidsRoute = ApiV1BlockHashTxidsRouteImport.update({
   id: '/txids',
@@ -467,6 +498,7 @@ export interface FileRoutesByFullPath {
   '/api/tx/$txid/outspends': typeof ApiTxTxidOutspendsRoute
   '/api/tx/$txid/status': typeof ApiTxTxidStatusRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
+  '/api/v1/address/_tokens': typeof ApiV1AddressTokensRoute
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
   '/api/v1/blocks/$startHeight': typeof ApiV1BlocksStartHeightRoute
@@ -480,8 +512,12 @@ export interface FileRoutesByFullPath {
   '/api/v1/mempool/': typeof ApiV1MempoolIndexRoute
   '/api/v1/tx/': typeof ApiV1TxIndexRoute
   '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
+  '/api/v1/address/$addr/token-txs': typeof ApiV1AddressAddrTokenTxsRoute
+  '/api/v1/address/$addr/tokens': typeof ApiV1AddressAddrTokensRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
+  '/api/v1/address/_omni/status': typeof ApiV1AddressOmniStatusRoute
+  '/api/v1/address/_token/$id': typeof ApiV1AddressTokenIdRoute
   '/api/v1/block/$hash/txids': typeof ApiV1BlockHashTxidsRoute
   '/api/v1/block/$hash/txs': typeof ApiV1BlockHashTxsRoute
   '/api/v1/blocks/tip/hash': typeof ApiV1BlocksTipHashRoute
@@ -536,6 +572,7 @@ export interface FileRoutesByTo {
   '/api/tx/$txid/outspends': typeof ApiTxTxidOutspendsRoute
   '/api/tx/$txid/status': typeof ApiTxTxidStatusRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
+  '/api/v1/address/_tokens': typeof ApiV1AddressTokensRoute
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
   '/api/v1/blocks/$startHeight': typeof ApiV1BlocksStartHeightRoute
@@ -549,8 +586,12 @@ export interface FileRoutesByTo {
   '/api/v1/mempool': typeof ApiV1MempoolIndexRoute
   '/api/v1/tx': typeof ApiV1TxIndexRoute
   '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
+  '/api/v1/address/$addr/token-txs': typeof ApiV1AddressAddrTokenTxsRoute
+  '/api/v1/address/$addr/tokens': typeof ApiV1AddressAddrTokensRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
+  '/api/v1/address/_omni/status': typeof ApiV1AddressOmniStatusRoute
+  '/api/v1/address/_token/$id': typeof ApiV1AddressTokenIdRoute
   '/api/v1/block/$hash/txids': typeof ApiV1BlockHashTxidsRoute
   '/api/v1/block/$hash/txs': typeof ApiV1BlockHashTxsRoute
   '/api/v1/blocks/tip/hash': typeof ApiV1BlocksTipHashRoute
@@ -607,6 +648,7 @@ export interface FileRoutesById {
   '/api/tx/$txid/outspends': typeof ApiTxTxidOutspendsRoute
   '/api/tx/$txid/status': typeof ApiTxTxidStatusRoute
   '/api/v1/address/$addr': typeof ApiV1AddressAddrRouteWithChildren
+  '/api/v1/address/_tokens': typeof ApiV1AddressTokensRoute
   '/api/v1/block-height/$height': typeof ApiV1BlockHeightHeightRoute
   '/api/v1/block/$hash': typeof ApiV1BlockHashRouteWithChildren
   '/api/v1/blocks/$startHeight': typeof ApiV1BlocksStartHeightRoute
@@ -620,8 +662,12 @@ export interface FileRoutesById {
   '/api/v1/mempool/': typeof ApiV1MempoolIndexRoute
   '/api/v1/tx/': typeof ApiV1TxIndexRoute
   '/api/v1/address/$addr/balance-history': typeof ApiV1AddressAddrBalanceHistoryRoute
+  '/api/v1/address/$addr/token-txs': typeof ApiV1AddressAddrTokenTxsRoute
+  '/api/v1/address/$addr/tokens': typeof ApiV1AddressAddrTokensRoute
   '/api/v1/address/$addr/txs': typeof ApiV1AddressAddrTxsRoute
   '/api/v1/address/$addr/utxo': typeof ApiV1AddressAddrUtxoRoute
+  '/api/v1/address/_omni/status': typeof ApiV1AddressOmniStatusRoute
+  '/api/v1/address/_token/$id': typeof ApiV1AddressTokenIdRoute
   '/api/v1/block/$hash/txids': typeof ApiV1BlockHashTxidsRoute
   '/api/v1/block/$hash/txs': typeof ApiV1BlockHashTxsRoute
   '/api/v1/blocks/tip/hash': typeof ApiV1BlocksTipHashRoute
@@ -679,6 +725,7 @@ export interface FileRouteTypes {
     | '/api/tx/$txid/outspends'
     | '/api/tx/$txid/status'
     | '/api/v1/address/$addr'
+    | '/api/v1/address/_tokens'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
     | '/api/v1/blocks/$startHeight'
@@ -692,8 +739,12 @@ export interface FileRouteTypes {
     | '/api/v1/mempool/'
     | '/api/v1/tx/'
     | '/api/v1/address/$addr/balance-history'
+    | '/api/v1/address/$addr/token-txs'
+    | '/api/v1/address/$addr/tokens'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
+    | '/api/v1/address/_omni/status'
+    | '/api/v1/address/_token/$id'
     | '/api/v1/block/$hash/txids'
     | '/api/v1/block/$hash/txs'
     | '/api/v1/blocks/tip/hash'
@@ -748,6 +799,7 @@ export interface FileRouteTypes {
     | '/api/tx/$txid/outspends'
     | '/api/tx/$txid/status'
     | '/api/v1/address/$addr'
+    | '/api/v1/address/_tokens'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
     | '/api/v1/blocks/$startHeight'
@@ -761,8 +813,12 @@ export interface FileRouteTypes {
     | '/api/v1/mempool'
     | '/api/v1/tx'
     | '/api/v1/address/$addr/balance-history'
+    | '/api/v1/address/$addr/token-txs'
+    | '/api/v1/address/$addr/tokens'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
+    | '/api/v1/address/_omni/status'
+    | '/api/v1/address/_token/$id'
     | '/api/v1/block/$hash/txids'
     | '/api/v1/block/$hash/txs'
     | '/api/v1/blocks/tip/hash'
@@ -818,6 +874,7 @@ export interface FileRouteTypes {
     | '/api/tx/$txid/outspends'
     | '/api/tx/$txid/status'
     | '/api/v1/address/$addr'
+    | '/api/v1/address/_tokens'
     | '/api/v1/block-height/$height'
     | '/api/v1/block/$hash'
     | '/api/v1/blocks/$startHeight'
@@ -831,8 +888,12 @@ export interface FileRouteTypes {
     | '/api/v1/mempool/'
     | '/api/v1/tx/'
     | '/api/v1/address/$addr/balance-history'
+    | '/api/v1/address/$addr/token-txs'
+    | '/api/v1/address/$addr/tokens'
     | '/api/v1/address/$addr/txs'
     | '/api/v1/address/$addr/utxo'
+    | '/api/v1/address/_omni/status'
+    | '/api/v1/address/_token/$id'
     | '/api/v1/block/$hash/txids'
     | '/api/v1/block/$hash/txs'
     | '/api/v1/blocks/tip/hash'
@@ -878,6 +939,7 @@ export interface RootRouteChildren {
   ApiBlocksTipHashRoute: typeof ApiBlocksTipHashRoute
   ApiBlocksTipHeightRoute: typeof ApiBlocksTipHeightRoute
   ApiV1AddressAddrRoute: typeof ApiV1AddressAddrRouteWithChildren
+  ApiV1AddressTokensRoute: typeof ApiV1AddressTokensRoute
   ApiV1BlockHeightHeightRoute: typeof ApiV1BlockHeightHeightRoute
   ApiV1BlockHashRoute: typeof ApiV1BlockHashRouteWithChildren
   ApiV1BlocksStartHeightRoute: typeof ApiV1BlocksStartHeightRoute
@@ -890,6 +952,8 @@ export interface RootRouteChildren {
   ApiV1BlocksIndexRoute: typeof ApiV1BlocksIndexRoute
   ApiV1MempoolIndexRoute: typeof ApiV1MempoolIndexRoute
   ApiV1TxIndexRoute: typeof ApiV1TxIndexRoute
+  ApiV1AddressOmniStatusRoute: typeof ApiV1AddressOmniStatusRoute
+  ApiV1AddressTokenIdRoute: typeof ApiV1AddressTokenIdRoute
   ApiV1BlocksTipHashRoute: typeof ApiV1BlocksTipHashRoute
   ApiV1BlocksTipHeightRoute: typeof ApiV1BlocksTipHeightRoute
   ApiV1MiningPoolsWindowRoute: typeof ApiV1MiningPoolsWindowRoute
@@ -1206,6 +1270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AddressAddrRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/v1/address/_tokens': {
+      id: '/api/v1/address/_tokens'
+      path: '/api/v1/address/_tokens'
+      fullPath: '/api/v1/address/_tokens'
+      preLoaderRoute: typeof ApiV1AddressTokensRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/v1/block-height/$height': {
       id: '/api/v1/block-height/$height'
       path: '/api/v1/block-height/$height'
@@ -1297,6 +1368,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiV1AddressAddrBalanceHistoryRouteImport
       parentRoute: typeof ApiV1AddressAddrRoute
     }
+    '/api/v1/address/$addr/token-txs': {
+      id: '/api/v1/address/$addr/token-txs'
+      path: '/token-txs'
+      fullPath: '/api/v1/address/$addr/token-txs'
+      preLoaderRoute: typeof ApiV1AddressAddrTokenTxsRouteImport
+      parentRoute: typeof ApiV1AddressAddrRoute
+    }
+    '/api/v1/address/$addr/tokens': {
+      id: '/api/v1/address/$addr/tokens'
+      path: '/tokens'
+      fullPath: '/api/v1/address/$addr/tokens'
+      preLoaderRoute: typeof ApiV1AddressAddrTokensRouteImport
+      parentRoute: typeof ApiV1AddressAddrRoute
+    }
     '/api/v1/address/$addr/txs': {
       id: '/api/v1/address/$addr/txs'
       path: '/txs'
@@ -1310,6 +1395,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/address/$addr/utxo'
       preLoaderRoute: typeof ApiV1AddressAddrUtxoRouteImport
       parentRoute: typeof ApiV1AddressAddrRoute
+    }
+    '/api/v1/address/_omni/status': {
+      id: '/api/v1/address/_omni/status'
+      path: '/api/v1/address/_omni/status'
+      fullPath: '/api/v1/address/_omni/status'
+      preLoaderRoute: typeof ApiV1AddressOmniStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v1/address/_token/$id': {
+      id: '/api/v1/address/_token/$id'
+      path: '/api/v1/address/_token/$id'
+      fullPath: '/api/v1/address/_token/$id'
+      preLoaderRoute: typeof ApiV1AddressTokenIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/v1/block/$hash/txids': {
       id: '/api/v1/block/$hash/txids'
@@ -1448,12 +1547,16 @@ const ApiBlockHashRouteWithChildren = ApiBlockHashRoute._addFileChildren(
 
 interface ApiV1AddressAddrRouteChildren {
   ApiV1AddressAddrBalanceHistoryRoute: typeof ApiV1AddressAddrBalanceHistoryRoute
+  ApiV1AddressAddrTokenTxsRoute: typeof ApiV1AddressAddrTokenTxsRoute
+  ApiV1AddressAddrTokensRoute: typeof ApiV1AddressAddrTokensRoute
   ApiV1AddressAddrTxsRoute: typeof ApiV1AddressAddrTxsRoute
   ApiV1AddressAddrUtxoRoute: typeof ApiV1AddressAddrUtxoRoute
 }
 
 const ApiV1AddressAddrRouteChildren: ApiV1AddressAddrRouteChildren = {
   ApiV1AddressAddrBalanceHistoryRoute: ApiV1AddressAddrBalanceHistoryRoute,
+  ApiV1AddressAddrTokenTxsRoute: ApiV1AddressAddrTokenTxsRoute,
+  ApiV1AddressAddrTokensRoute: ApiV1AddressAddrTokensRoute,
   ApiV1AddressAddrTxsRoute: ApiV1AddressAddrTxsRoute,
   ApiV1AddressAddrUtxoRoute: ApiV1AddressAddrUtxoRoute,
 }
@@ -1525,6 +1628,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBlocksTipHashRoute: ApiBlocksTipHashRoute,
   ApiBlocksTipHeightRoute: ApiBlocksTipHeightRoute,
   ApiV1AddressAddrRoute: ApiV1AddressAddrRouteWithChildren,
+  ApiV1AddressTokensRoute: ApiV1AddressTokensRoute,
   ApiV1BlockHeightHeightRoute: ApiV1BlockHeightHeightRoute,
   ApiV1BlockHashRoute: ApiV1BlockHashRouteWithChildren,
   ApiV1BlocksStartHeightRoute: ApiV1BlocksStartHeightRoute,
@@ -1537,6 +1641,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiV1BlocksIndexRoute: ApiV1BlocksIndexRoute,
   ApiV1MempoolIndexRoute: ApiV1MempoolIndexRoute,
   ApiV1TxIndexRoute: ApiV1TxIndexRoute,
+  ApiV1AddressOmniStatusRoute: ApiV1AddressOmniStatusRoute,
+  ApiV1AddressTokenIdRoute: ApiV1AddressTokenIdRoute,
   ApiV1BlocksTipHashRoute: ApiV1BlocksTipHashRoute,
   ApiV1BlocksTipHeightRoute: ApiV1BlocksTipHeightRoute,
   ApiV1MiningPoolsWindowRoute: ApiV1MiningPoolsWindowRoute,
