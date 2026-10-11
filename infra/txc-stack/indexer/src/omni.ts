@@ -182,7 +182,13 @@ function processTx(tx: RpcTx, height: number): void {
   }
 
   // Reference = last addressed output not paying the sender; else last addressed output.
-  const addressed = tx.vout.map((v) => ({ n: v.n, addr: voutAddress(v), sats: txcToSats(v.value) })).filter((x) => x.addr);
+  // Omni Core only treats legacy outputs (P2PKH / P2SH) as reference candidates —
+  // segwit (txc1…) outputs are ignored. Counting them misdirected e.g. self-sends
+  // that carried a small txc1 dust output.
+  const addressed = tx.vout
+    .filter((v) => v.scriptPubKey.type === "pubkeyhash" || v.scriptPubKey.type === "scripthash")
+    .map((v) => ({ n: v.n, addr: voutAddress(v), sats: txcToSats(v.value) }))
+    .filter((x) => x.addr);
   const nonSender = addressed.filter((x) => x.addr !== sender);
   const reference = (nonSender.at(-1) ?? addressed.at(-1))?.addr ?? null;
 
