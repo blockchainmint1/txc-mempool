@@ -1,66 +1,29 @@
-# Three-part build: Public API, Live Price, Fun Address Page
+# Plan: Support Omni "send-to-many" (bulk payments) on mempool.texitcoin.org
 
-## 1) Public API + `/docs` page
+## Background
+Bulk token payments (Omni "send to many", e.g. Thomas's 4,000 TSD payment) are now switched on by the network. Our indexer currently ignores them, so recipients show no balance and the transaction shows as "unknown". The old token explorer and wallets already count them.
 
-Stand up a **TXC-flavored** version of the mempool.space REST/WebSocket API, hosted on our explorer at `/api/v1/*`. Routes proxy through to the self-hosted backend at `api.mempool.texitcoin.org` and add TXC-only extras.
+## What we'll build
 
-**New server routes** (under `src/routes/api/public/v1/`, so they're CORS-free for outside callers):
-- `blocks/tip/height`, `blocks/tip/hash`
-- `block/$hash`, `block/$hash/txids`, `block-height/$height`
-- `blocks` (paginated), `blocks/$startHeight`
-- `tx/$txid`, `tx/$txid/status`, `tx/$txid/hex`, `tx/$txid/outspends`
-- `address/$addr`, `address/$addr/utxo`, `address/$addr/txs`
-- `mempool`, `mempool/recent`, `fees/recommended`, `fees/mempool-blocks`
-- `mining/pools/24h|1w|1m`, `difficulty-adjustment`
-- **TXC extras**: `omni/tx/$txid` (decoded Omni payload), `price` (live TXC price + 24h change), `supply` (circulating supply from emission curve)
-- `ws` — thin WebSocket pass-through to the upstream mempool WS, so external apps can subscribe to new blocks/txs/address updates
+### 1. Indexer: decode send-to-many transactions
+- In `infra/txc-stack/indexer/src/omni.ts`, add decoding for the send-to-many payload: sender (first input address, per the already-deployed v4 sender rule), property ID, and the list of (recipient, amount) pairs.
+- Credit each recipient, debit the sender for the total, and record one ledger row per recipient so each address's token history shows its own entry.
+- Insufficient-balance sends are marked invalid (same as simple sends) — sender keeps the tokens.
 
-All routes: GET-only, CORS `*`, OPTIONS handlers, JSON, 30-60s edge cache where appropriate.
+### 2. Activation height
+- Bulk sends only count from the network's switch-on block onward. Any bulk send before that height stays invalid (tokens never moved). Need the activation block height from HME Core to bake in as a constant.
 
-**New `/docs` route**: a clean, searchable reference page (left sidebar of categories, right pane with endpoint + example curl + example JSON response) styled in the explorer's dark theme. Tabs for **REST** and **WebSocket**.
+### 3. Transaction page display
+- Show send-to-many transactions as "Token Send to Many" with the full recipient list and amounts, instead of "unknown".
 
-## 2) Live TXC price (CoinMarketCap)
+### 4. Rebuild & verify
+- Bump scan version to force a full rescan, deploy to the box (copy file + `docker compose up -d --build indexer`), wait for rescan (~1 hour).
+- Verify: Thomas's address shows 4,000 TSD; the bulk transaction `ba2c3e9a…` lists all recipients; balances match the old token explorer for sampled addresses.
 
-- Add `CMC_API_KEY` secret.
-- New server fn `getTxcPrice` → calls CMC `/v2/cryptocurrency/quotes/latest?symbol=TXC`, caches result for 60s in memory.
-- New `/api/v1/price` public endpoint exposes `{ usd, btc, change24h, marketCap, volume24h, updatedAt }`.
-- New `<PriceTicker>` component pinned in the top nav: TXC/USD with green/red 24h delta.
-- USD values appear next to TXC amounts on the **address** and **tx** pages (toggleable).
+## Technical notes
+- Sender rule: first input address (already live in scan v4).
+- Balances stored as BigInt; divisible amounts use 8 decimals.
+- Reorg handling: ledger rows are rolled back by height, same as existing sends.
 
-## 3) Supercharged address page
-
-Rebuild `/address/$addr` into a multi-section dashboard:
-
-1. **Header card** (existing) + new pills: first-seen, last-seen, age, Type badge (P2PKH / P2SH / Multisig / Omni-issuer if detected).
-2. **Balance History chart** — line/area chart (Recharts), computed client-side by walking the address's tx history and summing deltas. Toggle: All vs Last 30 days. USD overlay if price is available.
-3. **UTXO bubble chart** — packed circles sized by sat value, color-graded by age (fresh → aged). Hover = value + height + age. Click = jump to funding tx.
-4. **Activity heatmap** — GitHub-style 12-month grid, one cell per day, intensity = tx count.
-5. **Flow & counterparties** — totals received vs sent, top 5 sending addresses, top 5 receiving addresses (with TXC totals), Omni token holdings if present.
-6. **Tx history list** (existing) moved to the bottom, with sticky filter chips: All / Received / Sent / Omni / Coinbase.
-
-## Technical details
-
-- Server routes use `createFileRoute(... )({ server: { handlers: { GET, OPTIONS } } })` with shared `CORS_HEADERS` helper at `src/lib/api/cors.ts`.
-- A thin `proxy(path)` helper in `src/lib/api/upstream.ts` fetches from `https://api.mempool.texitcoin.org/api/v1/...` and returns `Response.json(...)` with CORS + cache headers.
-- Charts use the existing `recharts` (already in deps); bubble packing uses `d3-hierarchy` (small, edge-safe).
-- Heatmap is a custom CSS-grid component (no extra dep).
-- Price fetcher is a server fn (keeps CMC key server-side), called from a React Query hook polling every 60s.
-- Docs page content is a single data file (`src/lib/docs/api-spec.ts`) so endpoints stay easy to edit.
-
-## Files (new)
-- `src/lib/api/cors.ts`, `src/lib/api/upstream.ts`
-- `src/routes/api/public/v1/*.ts` (one per endpoint group)
-- `src/routes/docs.tsx`
-- `src/lib/docs/api-spec.ts`
-- `src/lib/txc/price.functions.ts`, `src/components/explorer/PriceTicker.tsx`
-- `src/components/address/BalanceHistoryChart.tsx`
-- `src/components/address/UtxoBubbleChart.tsx`
-- `src/components/address/ActivityHeatmap.tsx`
-- `src/components/address/CounterpartiesPanel.tsx`
-
-## Out of scope (for this round)
-- Persisting historical price snapshots (we'll just cache live).
-- Authenticated/rate-limited API keys (open public API for now).
-- Mobile-specific layouts beyond what Tailwind responsive utilities already give us.
-
-Ready to build — shall I go?
+## Open item
+- Activation block height for send-to-many (from HME Core). If unknown, we can detect it from the first valid on-chain bulk send, but an explicit height is safer.
