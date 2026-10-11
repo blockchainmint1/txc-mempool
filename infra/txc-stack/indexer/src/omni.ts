@@ -64,6 +64,23 @@ db.exec(`
 
 const META_KEY = "omni_height";
 const START = Number(process.env.OMNI_START_HEIGHT ?? 0);
+
+// Bump whenever the decode/validity rules change in a way that makes existing
+// scanned data wrong. On startup, a mismatch wipes all omni tables and the
+// scanner rebuilds from START.
+const SCAN_VERSION = "2";
+{
+  const v = db.prepare("SELECT value FROM meta WHERE key = 'omni_version'").get() as { value: string } | undefined;
+  if (v?.value !== SCAN_VERSION) {
+    for (const t of ["omni_balances", "omni_ledger", "omni_properties", "omni_issuer_changes", "omni_txs", "omni_tx_addresses"]) {
+      db.prepare(`DELETE FROM ${t}`).run();
+    }
+    db.prepare("DELETE FROM meta WHERE key = ?").run(META_KEY);
+    db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES ('omni_version', ?)").run(SCAN_VERSION);
+    console.log(`[omni] scan version ${SCAN_VERSION}: wiped omni tables, rescanning from ${START}`);
+  }
+}
+
 export function getOmniHeight(): number {
   const r = db.prepare("SELECT value FROM meta WHERE key = ?").get(META_KEY) as { value: string } | undefined;
   return r ? Number(r.value) : START - 1;
