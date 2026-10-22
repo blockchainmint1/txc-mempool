@@ -218,7 +218,17 @@ export async function getBlockHash(h: number): Promise<string> {
   }
   return hash;
 }
+// Uncached getblockhash for the reorg check. The memo above can mask a deep
+// reorg (the cached hash matches the orphaned one we stored), so the reorg
+// walk must always ask the node directly.
+export const getBlockHashDirect = (h: number) => rpc<string>("getblockhash", [h]);
+
 export const getBlockVerbose = (hash: string) => rpc<RpcBlock>("getblock", [hash, 2]);
+
+// Verbosity 1: same header fields, but tx is just txids — no transaction
+// bodies or hex. Use for block summaries and txid lists.
+export type RpcBlockSummary = Omit<RpcBlock, "tx"> & { tx: string[] };
+export const getBlockVerbose1 = (hash: string) => rpc<RpcBlockSummary>("getblock", [hash, 1]);
 export const getRawTx = (txid: string, signal?: AbortSignal) => rpc<RpcTx>("getrawtransaction", [txid, true], signal);
 export const getRawMempool = () => rpc<string[]>("getrawmempool");
 
