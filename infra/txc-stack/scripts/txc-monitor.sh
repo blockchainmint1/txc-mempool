@@ -160,6 +160,20 @@ if [[ "$restarts" =~ ^[0-9]+$ ]]; then
   printf '%s\n' "$restarts" > "$STATE_DIR/indexer-restarts"
 fi
 
+heap_warning=$(curl -s -m 5 http://127.0.0.1:3001/health 2>/dev/null | python3 -c 'import json,sys
+try:
+    h=json.load(sys.stdin).get("memory",{}).get("heapUsed",0)
+    print(1 if h > 3*1024**3 else 0)
+except (ValueError,TypeError): print(0)' )
+if [ "$heap_warning" = 1 ]; then
+  if [ ! -f "$STATE_DIR/heap-warning" ]; then
+    tg "[mempool.TXC] ⚠️ History service heap exceeds 3 GB of its 4 GB ceiling. Check memory growth before another crash."
+    touch "$STATE_DIR/heap-warning"
+  fi
+else
+  rm -f "$STATE_DIR/heap-warning"
+fi
+
 # ---- state machine: only notify on change, or on the reminder interval ------
 prev_status="up"; prev_at=0
 if [ -f "$STATE_FILE" ]; then

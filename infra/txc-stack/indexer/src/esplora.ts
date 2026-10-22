@@ -31,11 +31,13 @@ const app = Fastify({ logger: false });
 const hydrationGate = new WorkGate(8, 0);
 const releases = new WeakMap<object, () => void>();
 const requestSignals = new WeakMap<object, AbortSignal>();
+const expensiveGate = new WorkGate(2, 0);
 app.addHook("onRequest", async (req, reply) => {
   const path = req.url.split("?")[0];
-  if (!/^\/address\/[^/]+\/txs(?:\/|$)|^\/block\/[^/]+\/txs|^\/tx\/[^/]+$/.test(path)) return;
+  const expensive = /^\/v1\/mining\/(reward-stats|difficulty-adjustments)\//.test(path);
+  if (!expensive && !/^\/address\/[^/]+\/txs(?:\/|$)|^\/block\/[^/]+\/txs|^\/tx\/[^/]+$/.test(path)) return;
   try {
-    const release = await hydrationGate.acquire();
+    const release = await (expensive ? expensiveGate : hydrationGate).acquire();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new DOMException("History deadline exceeded", "TimeoutError")), 20_000);
     const disconnected = () => controller.abort(new DOMException("Client disconnected", "AbortError"));
@@ -46,18 +48,20 @@ app.addHook("onRequest", async (req, reply) => {
   catch { return reply.code(503).header("retry-after", "5").send({ error: "History service busy; retry shortly" }); }
 });
 app.addHook("onResponse", async req => { releases.get(req)?.(); releases.delete(req); requestSignals.delete(req); });
+app.addHook("onError", async req => { releases.get(req)?.(); releases.delete(req); requestSignals.delete(req); });
 app.setErrorHandler((error, _req, reply) => {
   console.error(`[indexer] request failed: ${error.name}`);
-  reply.code(error instanceof OverloadError || error.name === "TimeoutError" || error.name === "AbortError" ? 503 : 500)
+  reply.code(error instanceof OverloadError || error instanceof RpcError || error.name === "TimeoutError" || error.name === "AbortError" ? 503 : 500)
     .send({ error: "Upstream unavailable; retry shortly" });
 });
 function createParents(signal?: AbortSignal) {
+  const requestSignal = signal ?? AbortSignal.timeout(20_000);
   const parents = new CompactParents(async (id: string) => {
-    const tx = await getRawTx(id, signal);
+    const tx = await getRawTx(id, requestSignal);
     // Do not retain parent vin, raw hex, or witness data for a whole page.
     return tx.vout.map(v => ({ hex: v.scriptPubKey.hex, type: v.scriptPubKey.type }));
   });
-  return { get: (id: string) => parents.get(id), signal };
+  return { get: (id: string) => parents.get(id), signal: requestSignal };
 }
 
 // Accept raw hex bodies for POST /tx (Esplora broadcast spec).
@@ -1088,7 +1092,8 @@ app.get<{ Params: { w: string } }>("/v1/mining/difficulty-adjustments/:w", async
 
 // Reward stats over the last N blocks (getblockstats: subsidy + fees, in sats).
 const rewardCache = new Map<number, { at: number; val: unknown }>();
-app.get<{ Params: { n: string } }>("/v1/mining/reward-stats/:n", async ({ params }, reply) => {
+app.get<{ Params: { n: string } }>("/v1/mining/reward-stats/:n", async (req, reply) => {
+  const { params } = req;
   const n = rewardWindow(params.n);
   const c = rewardCache.get(n);
   if (c && Date.now() - c.at < 120_000) return reply.send(c.val);
@@ -1096,7 +1101,7 @@ app.get<{ Params: { n: string } }>("/v1/mining/reward-stats/:n", async ({ params
     const tip = await getBlockCount();
     let reward = 0, fee = 0, txs = 0;
     for (let h = tip; h > tip - n && h >= 0; h--) {
-      const s = await rpc<{ subsidy: number; totalfee: number; txs: number }>("getblockstats", [h, ["subsidy", "totalfee", "txs"]]);
+      const s = await rpc<{ subsidy: number; totalfee: number; txs: number }>("getblockstats", [h, ["subsidy", "totalfee", "txs"]], requestSignals.get(req));
       reward += s.subsidy + s.totalfee; fee += s.totalfee; txs += s.txs;
     }
     const val = { startBlock: tip - n + 1, endBlock: tip, totalReward: String(reward), totalFee: String(fee), totalTx: String(txs) };
