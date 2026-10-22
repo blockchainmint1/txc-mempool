@@ -33,12 +33,14 @@ const RPC_RETRY_BASE_MS = Number(process.env.RPC_RETRY_BASE_MS ?? 120);
 
 function isRetryable(err: unknown): boolean {
   if (err instanceof RpcError) {
-    if (err.code === 502 || err.code === 503 || err.code === 500) return true;
+    // Our own waiting-room rejection: retrying just adds load.
+    if (err.code === 503 && err.message === "rpc queue full") return false;
+    if (err.code === 502 || err.code === 503) return true;
     const m = err.message.toLowerCase();
+    // Node warmup only. "Work queue depth exceeded" (HTTP 500, plain text)
+    // is pushback — the correct response is to shed load, not retry.
     return (
-      m.includes("work queue") ||
       m.includes("service unavailable") ||
-      m.includes("non-json rpc response") ||
       m.includes("warming up") ||
       m.includes("loading block index")
     );
