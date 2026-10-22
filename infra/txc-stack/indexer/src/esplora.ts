@@ -30,13 +30,22 @@ const PORT = Number(process.env.HTTP_PORT ?? 3001);
 const app = Fastify({ logger: false });
 const hydrationGate = new WorkGate(8, 0);
 const releases = new WeakMap<object, () => void>();
+const requestSignals = new WeakMap<object, AbortSignal>();
 app.addHook("onRequest", async (req, reply) => {
   const path = req.url.split("?")[0];
   if (!/^\/address\/[^/]+\/txs(?:\/|$)|^\/block\/[^/]+\/txs|^\/tx\/[^/]+$/.test(path)) return;
-  try { releases.set(req, await hydrationGate.acquire()); }
+  try {
+    const release = await hydrationGate.acquire();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new DOMException("History deadline exceeded", "TimeoutError")), 20_000);
+    const disconnected = () => controller.abort(new DOMException("Client disconnected", "AbortError"));
+    reply.raw.once("close", disconnected);
+    requestSignals.set(req, controller.signal);
+    releases.set(req, () => { clearTimeout(timer); reply.raw.removeListener("close", disconnected); release(); });
+  }
   catch { return reply.code(503).header("retry-after", "5").send({ error: "History service busy; retry shortly" }); }
 });
-app.addHook("onResponse", async req => { releases.get(req)?.(); releases.delete(req); });
+app.addHook("onResponse", async req => { releases.get(req)?.(); releases.delete(req); requestSignals.delete(req); });
 app.setErrorHandler((error, _req, reply) => {
   console.error(`[indexer] request failed: ${error.name}`);
   reply.code(error instanceof OverloadError || error.name === "TimeoutError" || error.name === "AbortError" ? 503 : 500)
@@ -514,17 +523,18 @@ app.get<{ Params: { addr: string } }>("/address/:addr/utxo", async ({ params }) 
 // GET /address/:addr/txs/chain/:last → next 25 confirmed after :last
 app.get<{ Params: { addr: string; last?: string }; Querystring: Record<string, never> }>(
   "/address/:addr/txs",
-  async ({ params }) => listConfirmed(params.addr, undefined, true),
+  async req => listConfirmed(req.params.addr, undefined, true, requestSignals.get(req)),
 );
 app.get<{ Params: { addr: string; last: string } }>(
   "/address/:addr/txs/chain/:last",
-  async ({ params }) => listConfirmed(params.addr, params.last, false),
+  async req => listConfirmed(req.params.addr, req.params.last, false, requestSignals.get(req)),
 );
-app.get<{ Params: { addr: string } }>("/address/:addr/txs/mempool", async ({ params }) => {
+app.get<{ Params: { addr: string } }>("/address/:addr/txs/mempool", async req => {
+  const { params } = req;
   const rows = db
     .prepare("SELECT txid FROM mempool_address_txs WHERE address = ?")
     .all(params.addr) as { txid: string }[];
-  const signal = AbortSignal.timeout(20_000);
+  const signal = requestSignals.get(req) ?? AbortSignal.timeout(20_000);
   const cache = createParents(signal);
   const out = [] as unknown[];
   for (const r of rows.slice(0, 50)) {
@@ -539,7 +549,7 @@ app.get<{ Params: { addr: string } }>("/address/:addr/txs/mempool", async ({ par
   return out;
 });
 
-async function listConfirmed(address: string, lastSeen: string | undefined, includeMempool: boolean) {
+async function listConfirmed(address: string, lastSeen: string | undefined, includeMempool: boolean, requestSignal?: AbortSignal) {
   // Pagination — Esplora pages by the last-seen txid's (height, txid).
   let beforeHeight = Number.MAX_SAFE_INTEGER;
   let beforeTxid = "z".repeat(64); // sorts after any hex txid
@@ -562,7 +572,7 @@ async function listConfirmed(address: string, lastSeen: string | undefined, incl
     )
     .all(address, beforeHeight, beforeHeight, beforeTxid) as { txid: string; height: number }[];
 
-  const signal = AbortSignal.timeout(20_000);
+  const signal = requestSignal ?? AbortSignal.timeout(20_000);
   const cache = createParents(signal);
   const out: unknown[] = [];
 
@@ -1107,3 +1117,6 @@ export async function startHttp(): Promise<void> {
   await app.listen({ host: "0.0.0.0", port: PORT });
   console.log(`[indexer] HTTP listening on :${PORT}`);
 }
+
+/** Offline integration checks use the real handlers with a fixture database. */
+export { app };
