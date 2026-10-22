@@ -2,13 +2,16 @@
 // We deliberately avoid the heavy bitcoin-core npm clients — TexitCoin uses
 // the same RPC surface as Bitcoin Core but we only need a handful of calls.
 
-import { WorkGate } from "./resource-controls.js";
+import { OverloadError, WorkGate } from "./resource-controls.js";
 
 const RPC_URL = process.env.RPC_URL ?? "http://host.docker.internal:15739";
 const RPC_USER = process.env.RPC_USER ?? "";
 const RPC_PASS = process.env.RPC_PASSWORD ?? "";
 const RPC_TIMEOUT_MS = Number(process.env.RPC_TIMEOUT_MS ?? 10_000);
-const rpcGate = new WorkGate(16, 64);
+const RPC_MAX_INFLIGHT = Number(process.env.RPC_MAX_INFLIGHT ?? 16);
+const RPC_MAX_QUEUE = Number(process.env.RPC_MAX_QUEUE ?? 200);
+const RPC_DEBUG = process.env.RPC_DEBUG === "true";
+const rpcGate = new WorkGate(RPC_MAX_INFLIGHT, RPC_MAX_QUEUE);
 export const rpcWorkStats = () => rpcGate.stats();
 
 const AUTH = "Basic " + Buffer.from(`${RPC_USER}:${RPC_PASS}`).toString("base64");
@@ -30,12 +33,14 @@ const RPC_RETRY_BASE_MS = Number(process.env.RPC_RETRY_BASE_MS ?? 120);
 
 function isRetryable(err: unknown): boolean {
   if (err instanceof RpcError) {
-    if (err.code === 502 || err.code === 503 || err.code === 500) return true;
+    // Our own waiting-room rejection: retrying just adds load.
+    if (err.code === 503 && err.message === "rpc queue full") return false;
+    if (err.code === 502 || err.code === 503) return true;
     const m = err.message.toLowerCase();
+    // Node warmup only. "Work queue depth exceeded" (HTTP 500, plain text)
+    // is pushback — the correct response is to shed load, not retry.
     return (
-      m.includes("work queue") ||
       m.includes("service unavailable") ||
-      m.includes("non-json rpc response") ||
       m.includes("warming up") ||
       m.includes("loading block index")
     );
@@ -49,7 +54,17 @@ function isRetryable(err: unknown): boolean {
 const NON_IDEMPOTENT = new Set(["sendrawtransaction"]);
 
 export async function rpc<T = unknown>(method: string, params: unknown[] = [], signal?: AbortSignal): Promise<T> {
-  const release = await rpcGate.acquire(signal);
+  let release: () => void;
+  try {
+    release = await rpcGate.acquire(signal);
+  } catch (err) {
+    if (err instanceof OverloadError) throw new RpcError(503, "rpc queue full");
+    throw err;
+  }
+  if (RPC_DEBUG) {
+    const s = rpcGate.stats();
+    console.log(`[rpc] ${method} inflight=${s.active}/${RPC_MAX_INFLIGHT} queued=${s.queued}/${RPC_MAX_QUEUE}`);
+  }
   try {
   const attempts = NON_IDEMPOTENT.has(method) ? 1 : RPC_RETRIES;
   let lastErr: unknown;
@@ -203,7 +218,17 @@ export async function getBlockHash(h: number): Promise<string> {
   }
   return hash;
 }
+// Uncached getblockhash for the reorg check. The memo above can mask a deep
+// reorg (the cached hash matches the orphaned one we stored), so the reorg
+// walk must always ask the node directly.
+export const getBlockHashDirect = (h: number) => rpc<string>("getblockhash", [h]);
+
 export const getBlockVerbose = (hash: string) => rpc<RpcBlock>("getblock", [hash, 2]);
+
+// Verbosity 1: same header fields, but tx is just txids — no transaction
+// bodies or hex. Use for block summaries and txid lists.
+export type RpcBlockSummary = Omit<RpcBlock, "tx"> & { tx: string[] };
+export const getBlockVerbose1 = (hash: string) => rpc<RpcBlockSummary>("getblock", [hash, 1]);
 export const getRawTx = (txid: string, signal?: AbortSignal) => rpc<RpcTx>("getrawtransaction", [txid, true], signal);
 export const getRawMempool = () => rpc<string[]>("getrawmempool");
 

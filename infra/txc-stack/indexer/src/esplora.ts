@@ -8,6 +8,7 @@ import {
   getBlockCount,
   getBlockHash,
   getBlockVerbose,
+  getBlockVerbose1,
   getRawMempool,
   getRawMempoolVerbose,
   getMempoolInfo,
@@ -27,7 +28,7 @@ import { addressTokens, addressOmniTxs, listProperties, propertyHolders, omniSta
 
 const PORT = Number(process.env.HTTP_PORT ?? 3001);
 
-const app = Fastify({ logger: false });
+const app = Fastify({ logger: false, connectionTimeout: 30_000, requestTimeout: 30_000 });
 const hydrationGate = new WorkGate(8, 0);
 const releases = new WeakMap<object, () => void>();
 const requestSignals = new WeakMap<object, AbortSignal>();
@@ -79,6 +80,7 @@ app.addHook("onSend", async (_req, reply, payload) => {
   reply.header("access-control-allow-origin", "*");
   reply.header("access-control-allow-methods", "GET, OPTIONS");
   reply.header("access-control-allow-headers", "Content-Type");
+  reply.header("access-control-expose-headers", "X-Truncated");
   return payload;
 });
 app.options("/*", async (_req, reply) => reply.code(204).send());
@@ -492,36 +494,48 @@ app.get<{
   };
 });
 
-// GET /address/:addr/utxo
-app.get<{ Params: { addr: string } }>("/address/:addr/utxo", async ({ params }) => {
-  const rows = db
-    .prepare(
-      `SELECT o.txid, o.vout, o.value, o.height, b.hash AS block_hash, b.time AS block_time
-       FROM outputs o
-       JOIN blocks b ON b.height = o.height
-       WHERE o.address = ? AND o.spent_txid IS NULL
-       ORDER BY o.height DESC, o.txid, o.vout`,
-    )
-    .all(params.addr) as Array<{
-    txid: string;
-    vout: number;
-    value: number;
-    height: number;
-    block_hash: string;
-    block_time: number;
-  }>;
-  return rows.map((r) => ({
-    txid: r.txid,
-    vout: r.vout,
-    value: r.value,
-    status: {
-      confirmed: true,
-      block_height: r.height,
-      block_hash: r.block_hash,
-      block_time: r.block_time,
-    },
-  }));
-});
+// GET /address/:addr/utxo — bounded: ?limit= (default 1000, max 5000).
+// Mining-pool payout addresses can accumulate tens of thousands of UTXOs;
+// returning them all in one body is how the heap blows up. When rows are
+// left over we set X-Truncated: true so callers know the list is partial.
+app.get<{ Params: { addr: string }; Querystring: { limit?: string } }>(
+  "/address/:addr/utxo",
+  async ({ params, query }, reply) => {
+    const limit = Math.min(Math.max(Number(query.limit) || 1000, 1), 5000);
+    const rows = db
+      .prepare(
+        `SELECT o.txid, o.vout, o.value, o.height, b.hash AS block_hash, b.time AS block_time
+          FROM outputs o
+         JOIN blocks b ON b.height = o.height
+         WHERE o.address = ? AND o.spent_txid IS NULL
+         ORDER BY o.height DESC, o.txid, o.vout
+         LIMIT ?`,
+      )
+      .all(params.addr, limit + 1) as Array<{
+      txid: string;
+      vout: number;
+      value: number;
+      height: number;
+      block_hash: string;
+      block_time: number;
+    }>;
+    if (rows.length > limit) {
+      reply.header("x-truncated", "true");
+      rows.length = limit;
+    }
+    return rows.map((r) => ({
+      txid: r.txid,
+      vout: r.vout,
+      value: r.value,
+      status: {
+        confirmed: true,
+        block_height: r.height,
+        block_hash: r.block_hash,
+        block_time: r.block_time,
+      },
+    }));
+  },
+);
 
 // GET /address/:addr/txs            → mempool (up to 50) + 25 most recent confirmed
 // GET /address/:addr/txs/chain/:last → next 25 confirmed after :last
@@ -609,7 +623,7 @@ async function listConfirmed(address: string, lastSeen: string | undefined, incl
 // /fee-estimates, /tx/:txid, /tx/:txid/status, /tx/:txid/outspends paths.
 // Nginx maps both bare `/api/*` and `/api/v1/*` to these.
 
-function toEsploraBlockSummary(b: RpcBlock): unknown {
+function toEsploraBlockSummary(b: Omit<RpcBlock, "tx">): unknown {
   return {
     id: b.hash,
     height: b.height,
@@ -668,7 +682,7 @@ async function listBlocks(start: number | undefined, reply: import("fastify").Fa
   const out: unknown[] = [];
   for (let i = 0; i < 10 && top - i >= 0; i++) {
     const hash = await getBlockHash(top - i);
-    const blk = await getBlockVerbose(hash);
+    const blk = await getBlockVerbose1(hash); // summaries don't need tx bodies
     out.push(toEsploraBlockSummary(blk));
   }
   return reply.send(out);
@@ -690,7 +704,7 @@ app.get<{ Params: { height: string } }>("/block-height/:height", async ({ params
 app.get<{ Params: { hash: string } }>("/block/:hash", async ({ params }, reply) => {
   if (!/^[0-9a-fA-F]{64}$/.test(params.hash)) return reply.code(400).send("invalid hash");
   try {
-    const blk = await getBlockVerbose(params.hash);
+    const blk = await getBlockVerbose1(params.hash);
     return reply.send(toEsploraBlockSummary(blk));
   } catch {
     return reply.code(404).type("text/plain").send("not found");
@@ -701,8 +715,8 @@ app.get<{ Params: { hash: string } }>("/block/:hash", async ({ params }, reply) 
 app.get<{ Params: { hash: string } }>("/block/:hash/txids", async ({ params }, reply) => {
   if (!/^[0-9a-fA-F]{64}$/.test(params.hash)) return reply.code(400).send("invalid hash");
   try {
-    const blk = await getBlockVerbose(params.hash);
-    return reply.send(blk.tx.map((t) => t.txid));
+    const blk = await getBlockVerbose1(params.hash); // verbosity 1: tx is txids
+    return reply.send(blk.tx);
   } catch {
     return reply.code(404).type("text/plain").send("not found");
   }
@@ -800,56 +814,63 @@ app.get<{ Params: { txid: string } }>("/tx/:txid/outspends", async ({ params }, 
 // builds an Esplora-style fee_histogram: buckets of [feerate_satvb, vsize]
 // sorted by feerate DESC (highest paying first) so the mempool viz can walk
 // it top-down to project the next few blocks.
+// Memoized (10s) so concurrent nginx cache misses share one verbose fetch
+// instead of each parsing a multi-MB mempool snapshot.
+const mempoolSummary = memo(10_000, async () => {
+  const entries = await getRawMempoolVerbose();
+  let count = 0;
+  let vsize = 0;
+  let totalFeeSats = 0;
+  // Group into fee-rate buckets in sat/vB.
+  const buckets: Array<{ feerate: number; vsize: number }> = [];
+  for (const [, e] of Object.entries(entries)) {
+    const feeTxc = e.fees?.base ?? e.fee ?? 0;
+    const feeSats = Math.round(feeTxc * 1e8);
+    const vs = e.vsize || e.size || 0;
+    if (vs <= 0) continue;
+    count++;
+    vsize += vs;
+    totalFeeSats += feeSats;
+    const rate = feeSats / vs; // sat/vB
+    buckets.push({ feerate: rate, vsize: vs });
+  }
+  // Sort DESC by feerate, then merge into coarse buckets so the payload
+  // stays small (mempool.space frontends expect ~O(bands), not O(txs)).
+  buckets.sort((a, b) => b.feerate - a.feerate);
+  const bands = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0];
+  const histogram: [number, number][] = [];
+  let bi = 0;
+  for (const band of bands) {
+    let sum = 0;
+    while (bi < buckets.length && buckets[bi].feerate >= band) {
+      sum += buckets[bi].vsize;
+      bi++;
+    }
+    if (sum > 0) histogram.push([band, sum]);
+  }
+  return {
+    count,
+    vsize,
+    total_fee: totalFeeSats,
+    fee_histogram: histogram,
+  };
+});
+
 app.get("/mempool", async (_req, reply) => {
   try {
-    const entries = await getRawMempoolVerbose();
-    let count = 0;
-    let vsize = 0;
-    let totalFeeSats = 0;
-    // Group into fee-rate buckets in sat/vB.
-    const buckets: Array<{ feerate: number; vsize: number }> = [];
-    for (const [, e] of Object.entries(entries)) {
-      const feeTxc = e.fees?.base ?? e.fee ?? 0;
-      const feeSats = Math.round(feeTxc * 1e8);
-      const vs = e.vsize || e.size || 0;
-      if (vs <= 0) continue;
-      count++;
-      vsize += vs;
-      totalFeeSats += feeSats;
-      const rate = feeSats / vs; // sat/vB
-      buckets.push({ feerate: rate, vsize: vs });
-    }
-    // Sort DESC by feerate, then merge into coarse buckets so the payload
-    // stays small (mempool.space frontends expect ~O(bands), not O(txs)).
-    buckets.sort((a, b) => b.feerate - a.feerate);
-    const bands = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0];
-    const histogram: [number, number][] = [];
-    let bi = 0;
-    for (const band of bands) {
-      let sum = 0;
-      while (bi < buckets.length && buckets[bi].feerate >= band) {
-        sum += buckets[bi].vsize;
-        bi++;
-      }
-      if (sum > 0) histogram.push([band, sum]);
-    }
-    return reply.send({
-      count,
-      vsize,
-      total_fee: totalFeeSats,
-      fee_histogram: histogram,
-    });
+    return reply.send(await mempoolSummary());
   } catch (err) {
     console.error("[indexer] /mempool failed:", (err as Error).message);
     return reply.send({ count: 0, vsize: 0, total_fee: 0, fee_histogram: [] });
   }
 });
 
-// GET /mempool/txids — raw txid list
+// GET /mempool/txids — raw txid list, capped at 10,000 so a huge mempool
+// can't produce a multi-MB response body per request.
 app.get("/mempool/txids", async (_req, reply) => {
   try {
     const txids = await getRawMempool();
-    return reply.send(txids);
+    return reply.send(txids.slice(0, 10_000));
   } catch {
     return reply.send([]);
   }
@@ -859,28 +880,34 @@ app.get("/mempool/txids", async (_req, reply) => {
 // Fees come from getrawmempool verbose (Core computes them from prevouts,
 // including chains of unconfirmed txs) so we don't have to resolve inputs
 // ourselves.
+// Memoized (10s): the verbose mempool fetch is the expensive part and every
+// cache miss used to redo it.
+const mempoolRecent = memo(10_000, async () => {
+  const entries = await getRawMempoolVerbose();
+  // Sort by mempool arrival time DESC and take the top 10.
+  const rows = Object.entries(entries)
+    .map(([txid, e]) => ({ txid, e }))
+    .sort((a, b) => (b.e.time ?? 0) - (a.e.time ?? 0))
+    .slice(0, 10);
+  const out: unknown[] = [];
+  for (const { txid, e } of rows) {
+    const feeTxc = e.fees?.base ?? e.fee ?? 0;
+    const feeSats = Math.round(feeTxc * 1e8);
+    let value = 0;
+    try {
+      const tx = await getRawTx(txid);
+      value = tx.vout.reduce((a, v) => a + txcToSats(v.value), 0);
+    } catch {
+      /* keep value=0 if tx dropped between calls */
+    }
+    out.push({ txid, fee: feeSats, vsize: e.vsize || e.size || 0, value });
+  }
+  return out;
+});
+
 app.get("/mempool/recent", async (_req, reply) => {
   try {
-    const entries = await getRawMempoolVerbose();
-    // Sort by mempool arrival time DESC and take the top 10.
-    const rows = Object.entries(entries)
-      .map(([txid, e]) => ({ txid, e }))
-      .sort((a, b) => (b.e.time ?? 0) - (a.e.time ?? 0))
-      .slice(0, 10);
-    const out: unknown[] = [];
-    for (const { txid, e } of rows) {
-      const feeTxc = e.fees?.base ?? e.fee ?? 0;
-      const feeSats = Math.round(feeTxc * 1e8);
-      let value = 0;
-      try {
-        const tx = await getRawTx(txid);
-        value = tx.vout.reduce((a, v) => a + txcToSats(v.value), 0);
-      } catch {
-        /* keep value=0 if tx dropped between calls */
-      }
-      out.push({ txid, fee: feeSats, vsize: e.vsize || e.size || 0, value });
-    }
-    return reply.send(out);
+    return reply.send(await mempoolRecent());
   } catch (err) {
     console.error("[indexer] /mempool/recent failed:", (err as Error).message);
     return reply.send([]);

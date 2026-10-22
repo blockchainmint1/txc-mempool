@@ -6,6 +6,7 @@
 import {
   getBlockCount,
   getBlockHash,
+  getBlockHashDirect,
   getBlockVerbose,
   getRawMempool,
   getRawTx,
@@ -18,6 +19,7 @@ import { rollbackOmni } from "./omni.js";
 
 const POLL_MS = Number(process.env.POLL_MS ?? 5_000);
 const MEMPOOL_REFRESH_MS = Number(process.env.MEMPOOL_REFRESH_MS ?? 15_000);
+const MAX_ROLLBACK_PER_PASS = Number(process.env.MAX_ROLLBACK_PER_PASS ?? 100);
 
 const insertBlock = db.prepare(
   "INSERT OR REPLACE INTO blocks(height, hash, time) VALUES (?, ?, ?)",
@@ -118,15 +120,27 @@ async function syncOnce(): Promise<void> {
   let localHeight = getTipHeight();
 
   // Reorg detection: if our tip exists and doesn't match the node's block at
-  // that height, roll back until we re-converge.
+  // that height, roll back until we re-converge. Two safeguards:
+  //  - Ask the node directly (no memo) and let a failure throw: an RPC error
+  //    must abort this pass, never roll back. Only a genuine hash mismatch
+  //    is a reorg.
+  //  - Cap rollback depth per pass so a persistent failure mode can't walk
+  //    the chain backwards without limit.
+  let rolled = 0;
   while (localHeight >= 0) {
     const localHash = getBlockHashAt(localHeight);
     if (!localHash) break;
-    const nodeHash = await getBlockHash(localHeight).catch(() => null);
-    if (nodeHash && nodeHash === localHash) break;
+    const nodeHash = await getBlockHashDirect(localHeight);
+    if (nodeHash === localHash) break;
+    if (rolled >= MAX_ROLLBACK_PER_PASS) {
+      throw new Error(
+        `reorg deeper than ${MAX_ROLLBACK_PER_PASS} blocks; refusing to roll back further this pass`,
+      );
+    }
     console.log(`[indexer] reorg at ${localHeight}, rolling back`);
     rollbackOmni(localHeight);
     rollback(localHeight);
+    rolled++;
     localHeight--;
   }
 
