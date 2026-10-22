@@ -54,7 +54,8 @@ export function positiveInteger(raw: string | undefined, fallback: number): numb
 export class TokenBucket {
   private tokens: number;
   private at: number;
-  constructor(private readonly rate = 20, private readonly burst = 40,
+  constructor(private readonly rate = positiveInteger(process.env.CLIENT_REQUESTS_PER_SECOND, 200),
+    private readonly burst = positiveInteger(process.env.CLIENT_REQUEST_BURST, 1000),
     private readonly clock = () => performance.now()) {
     this.tokens = burst;
     this.at = clock();
@@ -69,7 +70,8 @@ export class TokenBucket {
   }
 }
 
-export const MAX_BATCH = 50;
+// Existing mobile wallets batch 200 balances and 100 history/UTXO requests.
+export const MAX_BATCH = positiveInteger(process.env.MAX_BATCH, 200);
 export const MAX_HEADERS = 500;
 export const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 export function headerCount(raw: unknown): number {

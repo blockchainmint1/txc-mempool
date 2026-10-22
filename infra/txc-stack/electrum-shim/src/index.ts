@@ -9,8 +9,8 @@ import { handle, RpcFault, getTip, statusFor } from "./methods.js";
 import { operationalStats, refreshScripthashMap } from "./db.js";
 import { startFeeWarmer } from "./fees.js";
 import { mempoolSnapshotStats, startMempoolWatcher } from "./mempool.js";
-import { closeWhenIdle, dispatch } from "./protocol.js";
-import { positiveInteger, TokenBucket } from "./resource-controls.js";
+import { admitConnection, closeWhenIdle, dispatch } from "./protocol.js";
+import { positiveInteger, TokenBucket, WorkGate } from "./resource-controls.js";
 import { rpcWorkStats } from "./rpc.js";
 
 const TCP_PORT = Number(process.env.TCP_PORT ?? 50001);
@@ -35,6 +35,7 @@ interface Client {
   headersSub: boolean;
   scripthashSubs: Map<string, string | null>;
   bucket: TokenBucket;
+  gate: WorkGate;
   /** Client name from server.version, e.g. "TXC Wallet" or "healthcheck". */
   name?: string;
 }
@@ -54,6 +55,7 @@ function summarize(result: unknown): string {
 
 
 const clients = new Set<Client>();
+const sockets = new Set<net.Socket>();
 let requestCount = 0;
 let errorCount = 0;
 let slowRequestCount = 0;
@@ -154,7 +156,8 @@ async function onLine(line: string, c: Client): Promise<void> {
     send(c, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } });
     return;
   }
-  send(c, await dispatch(parsed, c.bucket, req => handleOne(req, c)));
+  send(c, await dispatch(parsed, c.bucket, req => c.socket.destroyed
+    ? Promise.resolve(null) : handleOne(req, c), c.gate));
 }
 
 function attach(socket: net.Socket, transport: "tcp" | "tls"): void {
@@ -169,6 +172,7 @@ function attach(socket: net.Socket, transport: "tcp" | "tls"): void {
     headersSub: false,
     scripthashSubs: new Map(),
     bucket: new TokenBucket(),
+    gate: new WorkGate(4, 1000, 30_000),
   };
   clients.add(c);
 
@@ -285,7 +289,9 @@ function start(): void {
   startFeeWarmer();
   startMempoolWatcher();
 
-  const tcpServer = net.createServer((socket) => attach(socket, "tcp"));
+  const tcpServer = net.createServer((socket) => {
+    if (admitConnection(socket, sockets, MAX_CLIENTS)) attach(socket, "tcp");
+  });
   tcpServer.maxConnections = MAX_CLIENTS;
   tcpServer.listen(TCP_PORT, () =>
     console.log(`[electrum] TCP listening on ${TCP_PORT}`),
@@ -307,7 +313,7 @@ function start(): void {
     // an iOS trust/ATS failure is distinguishable from DNS or firewall trouble.
     tlsServer.maxConnections = MAX_CLIENTS;
     tlsServer.on("connection", (socket) => {
-      if (clients.size >= MAX_CLIENTS) { socket.destroy(); return; }
+      if (!admitConnection(socket, sockets, MAX_CLIENTS)) return;
       if (LOG_CONNECTIONS) {
         console.log(`[electrum] TLS TCP arrival from ${peerLabel(socket)}`);
       }
