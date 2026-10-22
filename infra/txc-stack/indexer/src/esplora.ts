@@ -623,7 +623,7 @@ async function listConfirmed(address: string, lastSeen: string | undefined, incl
 // /fee-estimates, /tx/:txid, /tx/:txid/status, /tx/:txid/outspends paths.
 // Nginx maps both bare `/api/*` and `/api/v1/*` to these.
 
-function toEsploraBlockSummary(b: RpcBlock): unknown {
+function toEsploraBlockSummary(b: Omit<RpcBlock, "tx">): unknown {
   return {
     id: b.hash,
     height: b.height,
@@ -682,7 +682,7 @@ async function listBlocks(start: number | undefined, reply: import("fastify").Fa
   const out: unknown[] = [];
   for (let i = 0; i < 10 && top - i >= 0; i++) {
     const hash = await getBlockHash(top - i);
-    const blk = await getBlockVerbose(hash);
+    const blk = await getBlockVerbose1(hash); // summaries don't need tx bodies
     out.push(toEsploraBlockSummary(blk));
   }
   return reply.send(out);
@@ -704,7 +704,7 @@ app.get<{ Params: { height: string } }>("/block-height/:height", async ({ params
 app.get<{ Params: { hash: string } }>("/block/:hash", async ({ params }, reply) => {
   if (!/^[0-9a-fA-F]{64}$/.test(params.hash)) return reply.code(400).send("invalid hash");
   try {
-    const blk = await getBlockVerbose(params.hash);
+    const blk = await getBlockVerbose1(params.hash);
     return reply.send(toEsploraBlockSummary(blk));
   } catch {
     return reply.code(404).type("text/plain").send("not found");
@@ -715,8 +715,8 @@ app.get<{ Params: { hash: string } }>("/block/:hash", async ({ params }, reply) 
 app.get<{ Params: { hash: string } }>("/block/:hash/txids", async ({ params }, reply) => {
   if (!/^[0-9a-fA-F]{64}$/.test(params.hash)) return reply.code(400).send("invalid hash");
   try {
-    const blk = await getBlockVerbose(params.hash);
-    return reply.send(blk.tx.map((t) => t.txid));
+    const blk = await getBlockVerbose1(params.hash); // verbosity 1: tx is txids
+    return reply.send(blk.tx);
   } catch {
     return reply.code(404).type("text/plain").send("not found");
   }
