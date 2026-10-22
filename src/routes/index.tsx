@@ -19,6 +19,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "Live TEXITcoin mempool, projected blocks, fee estimator, and recent blocks." },
       { property: "og:title", content: "TXC Mempool — Live TEXITcoin Block Explorer" },
       { property: "og:description", content: "Live TEXITcoin mempool, projected blocks, fee estimator, and recent blocks." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Dashboard,

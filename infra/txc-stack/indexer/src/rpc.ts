@@ -2,10 +2,14 @@
 // We deliberately avoid the heavy bitcoin-core npm clients — TexitCoin uses
 // the same RPC surface as Bitcoin Core but we only need a handful of calls.
 
+import { WorkGate } from "./resource-controls.js";
+
 const RPC_URL = process.env.RPC_URL ?? "http://host.docker.internal:15739";
 const RPC_USER = process.env.RPC_USER ?? "";
 const RPC_PASS = process.env.RPC_PASSWORD ?? "";
-const RPC_TIMEOUT_MS = Number(process.env.RPC_TIMEOUT_MS ?? 60_000);
+const RPC_TIMEOUT_MS = Number(process.env.RPC_TIMEOUT_MS ?? 10_000);
+const rpcGate = new WorkGate(16, 64);
+export const rpcWorkStats = () => rpcGate.stats();
 
 const AUTH = "Basic " + Buffer.from(`${RPC_USER}:${RPC_PASS}`).toString("base64");
 
@@ -44,15 +48,18 @@ function isRetryable(err: unknown): boolean {
 /** Methods that are safe to replay. Never retry a broadcast. */
 const NON_IDEMPOTENT = new Set(["sendrawtransaction"]);
 
-export async function rpc<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
+export async function rpc<T = unknown>(method: string, params: unknown[] = [], signal?: AbortSignal): Promise<T> {
+  const release = await rpcGate.acquire(signal);
+  try {
   const attempts = NON_IDEMPOTENT.has(method) ? 1 : RPC_RETRIES;
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await rpcOnce<T>(method, params);
+      signal?.throwIfAborted();
+      return await rpcOnce<T>(method, params, signal);
     } catch (err) {
       lastErr = err;
-      if (i === attempts - 1 || !isRetryable(err)) throw err;
+      if (signal?.aborted || i === attempts - 1 || !isRetryable(err)) throw err;
       // Exponential backoff with jitter so a thundering herd of clients
       // doesn't re-saturate the work queue in lockstep.
       const wait = RPC_RETRY_BASE_MS * 2 ** i + Math.floor(Math.random() * 80);
@@ -60,9 +67,10 @@ export async function rpc<T = unknown>(method: string, params: unknown[] = []): 
     }
   }
   throw lastErr;
+  } finally { release(); }
 }
 
-async function rpcOnce<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
+async function rpcOnce<T = unknown>(method: string, params: unknown[] = [], signal?: AbortSignal): Promise<T> {
   const id = nextId++;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), RPC_TIMEOUT_MS);
@@ -71,7 +79,7 @@ async function rpcOnce<T = unknown>(method: string, params: unknown[] = []): Pro
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: AUTH },
       body: JSON.stringify({ jsonrpc: "1.0", id, method, params }),
-      signal: ctrl.signal,
+      signal: signal ? AbortSignal.any([ctrl.signal, signal]) : ctrl.signal,
     });
 
     // Bitcoin Core sometimes rejects with a plain-text body instead of JSON —
@@ -161,20 +169,23 @@ export interface RpcBlock {
 // that into at most one node call per interval even if nginx's cache misses.
 let tipCache: { height: number; at: number } | null = null;
 const TIP_CACHE_MS = Number(process.env.TIP_CACHE_MS ?? 1_500);
+let tipInflight: Promise<number> | null = null;
 
 export async function getBlockCount(): Promise<number> {
   const now = Date.now();
   if (tipCache && now - tipCache.at < TIP_CACHE_MS) return tipCache.height;
-  try {
+  if (tipInflight) return tipInflight;
+  tipInflight = (async () => { try {
     const height = await rpc<number>("getblockcount");
     tipCache = { height, at: now };
     return height;
   } catch (err) {
     // Last-known-good tip beats a 500. At most a few minutes stale, and only
     // while the node is refusing RPC.
-    if (tipCache) return tipCache.height;
+    if (tipCache && Date.now() - tipCache.at < 180_000) return tipCache.height;
     throw err;
-  }
+  } finally { tipInflight = null; } })();
+  return tipInflight;
 }
 
 // Block hashes are immutable once buried, so memoize them permanently for
@@ -193,7 +204,7 @@ export async function getBlockHash(h: number): Promise<string> {
   return hash;
 }
 export const getBlockVerbose = (hash: string) => rpc<RpcBlock>("getblock", [hash, 2]);
-export const getRawTx = (txid: string) => rpc<RpcTx>("getrawtransaction", [txid, true]);
+export const getRawTx = (txid: string, signal?: AbortSignal) => rpc<RpcTx>("getrawtransaction", [txid, true], signal);
 export const getRawMempool = () => rpc<string[]>("getrawmempool");
 
 // Verbose mempool: { txid: { vsize, weight, fee (TXC), fees: { base, modified, ancestor, descendant }, ... } }

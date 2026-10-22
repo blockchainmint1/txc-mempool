@@ -7,6 +7,8 @@ export const Route = createFileRoute("/about")({
       { name: "description", content: "What TXC Mempool is, how it works, and the data sources behind it." },
       { property: "og:title", content: "About TXC Mempool" },
       { property: "og:description", content: "How the TEXITcoin block explorer works." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: AboutPage,
