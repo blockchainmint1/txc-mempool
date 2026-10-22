@@ -34,6 +34,8 @@ REMIND_MIN="${REMIND_MIN:-60}"   # re-nag interval while still down
 STATE_DIR="/var/lib/txc-monitor"
 STATE_FILE="$STATE_DIR/state"
 mkdir -p "$STATE_DIR"
+exec 9>"$STATE_DIR/run.lock"
+flock -n 9 || exit 0
 
 if [ -f "$STACK_DIR/.env" ]; then
   set -a; # shellcheck disable=SC1091
@@ -115,6 +117,48 @@ else
 fi
 
 log "status=$status bad=$bad busy=$busy api=$api_code height=${height:-} ${last_detail}"
+
+# Probe actual wallet history independently: a cached tip can hide its outage.
+HISTORY_ADDRESS="${HISTORY_ADDRESS:-TmmoqqhcfBZWRG8feCTE2c4N4BsADgwD1m}"
+history_file=$(mktemp)
+history_code=$(curl -s -m 25 -o "$history_file" -w '%{http_code}' "https://${DOMAIN}/api/address/${HISTORY_ADDRESS}/txs")
+history_ok=0
+if [ "$history_code" = "200" ] && python3 - "$history_file" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1]) as f: rows = json.load(f)
+    assert isinstance(rows, list) and len(rows) > 0
+    assert all(isinstance(r, dict) and isinstance(r.get('txid'), str) for r in rows)
+except (OSError, ValueError, AssertionError):
+    sys.exit(1)
+PY
+then history_ok=1; fi
+rm -f "$history_file"
+history_bad=0; history_alerted=0
+if [ -f "$STATE_DIR/history" ]; then read -r history_bad history_alerted < "$STATE_DIR/history" || true; fi
+if [ "$history_ok" = 1 ]; then
+  [ "$history_alerted" = 0 ] || tg "[mempool.TXC] ✅ Wallet history RECOVERED"
+  history_bad=0; history_alerted=0
+else
+  history_bad=$((history_bad+1))
+  if [ "$history_bad" -ge 2 ] && [ "$history_alerted" = 0 ]; then
+    tg "[mempool.TXC] 🔴 Wallet history failing or taking over 25 seconds (HTTP ${history_code}). Block-tip health does not rule this out."
+    history_alerted=1
+  fi
+fi
+printf '%s %s\n' "$history_bad" "$history_alerted" > "$STATE_DIR/history"
+log "history_ok=$history_ok consecutive_failures=$history_bad"
+
+# Catch a crash even when Docker recovered before the next history probe.
+restarts=$(docker inspect --format '{{.RestartCount}}' txc-indexer 2>/dev/null || true)
+if [[ "$restarts" =~ ^[0-9]+$ ]]; then
+  previous="$restarts"
+  [ ! -f "$STATE_DIR/indexer-restarts" ] || read -r previous < "$STATE_DIR/indexer-restarts"
+  if [ "$restarts" -gt "$previous" ]; then
+    tg "[mempool.TXC] 🔴 History service restarted $((restarts-previous)) time(s) since the last check. Inspect txc-indexer logs."
+  fi
+  printf '%s\n' "$restarts" > "$STATE_DIR/indexer-restarts"
+fi
 
 # ---- state machine: only notify on change, or on the reminder interval ------
 prev_status="up"; prev_at=0
