@@ -1,4 +1,4 @@
-- [ ] Bound indexer RPC work and transaction hydration; prevent partial history on overload.
-- [ ] Add history/restart/memory monitoring and safe heap headroom.
-- [ ] Run regression tests and prepare exact server update instructions.
+- [x] Bound indexer RPC work and transaction hydration; prevent partial history on overload.
+- [x] Add history/restart/memory monitoring and safe heap headroom.
+- [x] Run regression tests and prepare exact server update instructions.
 - [ ] Verify on production after Bobby installs the update (requires box access).
