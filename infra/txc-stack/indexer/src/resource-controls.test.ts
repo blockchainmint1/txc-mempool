@@ -56,6 +56,13 @@ test("failed parent lookup is removed and can retry", async () => {
   await assert.rejects(cache.get('parent'));
   assert.equal(cache.size, 0); assert.equal(await cache.get('parent'), 42);
 });
+test("parent cache caps retained bytes and does not keep an oversized parent", async () => {
+  const cache = new CompactParents(async id => id, 64, value => value.length, 10);
+  await cache.get('123456'); await cache.get('abcdef');
+  assert.equal(cache.retainedBytes, 6); assert.equal(cache.size, 1);
+  assert.equal(await cache.get('an oversized parent'), 'an oversized parent');
+  assert.equal(cache.retainedBytes, 6); assert.equal(cache.size, 1);
+});
 test("fractional reward windows cannot create unlimited cache keys", () => {
   const keys = new Set(Array.from({length: 10000}, (_, i) => rewardWindow(String(100 + i/10000))));
   assert.deepEqual([...keys], [100]);

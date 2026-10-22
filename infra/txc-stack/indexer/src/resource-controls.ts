@@ -61,23 +61,46 @@ export async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) 
 /** Store pending promises immediately, and cap retained parent-output data. */
 export class CompactParents<T> {
   private entries = new Map<string, Promise<T>>();
-  constructor(private readonly load: (id: string) => Promise<T>, private readonly limit = 64) {}
+  private sizes = new Map<string, number>();
+  private bytes = 0;
+  constructor(private readonly load: (id: string) => Promise<T>, private readonly limit = 64,
+    private readonly weigh: (value: T) => number = () => 0, private readonly maxBytes = 4 * 1024 * 1024) {}
+  private drop(id: string) {
+    this.entries.delete(id);
+    this.bytes -= this.sizes.get(id) ?? 0;
+    this.sizes.delete(id);
+  }
   get(id: string): Promise<T> {
     const cached = this.entries.get(id);
     if (cached) return cached;
     while (this.entries.size >= this.limit) {
       const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;
-      this.entries.delete(oldest);
+      this.drop(oldest);
     }
-    const pending = this.load(id).catch(error => {
-      if (this.entries.get(id) === pending) this.entries.delete(id);
+    const pending = this.load(id).then(value => {
+      if (this.entries.get(id) === pending) {
+        const size = this.weigh(value);
+        if (size > this.maxBytes) this.drop(id);
+        else {
+          this.sizes.set(id, size); this.bytes += size;
+          while (this.bytes > this.maxBytes) {
+            const oldest = this.entries.keys().next().value;
+            if (oldest === undefined) break;
+            this.drop(oldest);
+          }
+        }
+      }
+      return value;
+    }).catch(error => {
+      if (this.entries.get(id) === pending) this.drop(id);
       throw error;
     });
     this.entries.set(id, pending);
     return pending;
   }
   get size() { return this.entries.size; }
+  get retainedBytes() { return this.bytes; }
 }
 
 export function rewardWindow(raw: string): number {

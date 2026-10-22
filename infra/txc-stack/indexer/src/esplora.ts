@@ -60,7 +60,7 @@ function createParents(signal?: AbortSignal) {
     const tx = await getRawTx(id, requestSignal);
     // Do not retain parent vin, raw hex, or witness data for a whole page.
     return tx.vout.map(v => ({ hex: v.scriptPubKey.hex, type: v.scriptPubKey.type }));
-  });
+  }, 64, outputs => outputs.reduce((bytes, output) => bytes + 64 + 2 * (output.hex.length + output.type.length), 0));
   return { get: (id: string) => parents.get(id), signal: requestSignal };
 }
 
