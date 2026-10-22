@@ -74,7 +74,11 @@ test("client limit defaults to 500 and closes extra raw sockets", async () => {
   const extra = net.connect(address.port, "127.0.0.1");
   await once(extra, "close");
   assert.equal(sockets.size, 1);
+  const accepted = [...sockets][0];
+  assert.ok(accepted);
+  const closed = once(accepted, "close");
   first.destroy();
+  await closed;
   await new Promise<void>(resolve => server.close(() => resolve()));
   assert.equal(sockets.size, 0);
 });
