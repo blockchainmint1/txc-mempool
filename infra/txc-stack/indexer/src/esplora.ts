@@ -814,56 +814,63 @@ app.get<{ Params: { txid: string } }>("/tx/:txid/outspends", async ({ params }, 
 // builds an Esplora-style fee_histogram: buckets of [feerate_satvb, vsize]
 // sorted by feerate DESC (highest paying first) so the mempool viz can walk
 // it top-down to project the next few blocks.
+// Memoized (10s) so concurrent nginx cache misses share one verbose fetch
+// instead of each parsing a multi-MB mempool snapshot.
+const mempoolSummary = memo(10_000, async () => {
+  const entries = await getRawMempoolVerbose();
+  let count = 0;
+  let vsize = 0;
+  let totalFeeSats = 0;
+  // Group into fee-rate buckets in sat/vB.
+  const buckets: Array<{ feerate: number; vsize: number }> = [];
+  for (const [, e] of Object.entries(entries)) {
+    const feeTxc = e.fees?.base ?? e.fee ?? 0;
+    const feeSats = Math.round(feeTxc * 1e8);
+    const vs = e.vsize || e.size || 0;
+    if (vs <= 0) continue;
+    count++;
+    vsize += vs;
+    totalFeeSats += feeSats;
+    const rate = feeSats / vs; // sat/vB
+    buckets.push({ feerate: rate, vsize: vs });
+  }
+  // Sort DESC by feerate, then merge into coarse buckets so the payload
+  // stays small (mempool.space frontends expect ~O(bands), not O(txs)).
+  buckets.sort((a, b) => b.feerate - a.feerate);
+  const bands = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0];
+  const histogram: [number, number][] = [];
+  let bi = 0;
+  for (const band of bands) {
+    let sum = 0;
+    while (bi < buckets.length && buckets[bi].feerate >= band) {
+      sum += buckets[bi].vsize;
+      bi++;
+    }
+    if (sum > 0) histogram.push([band, sum]);
+  }
+  return {
+    count,
+    vsize,
+    total_fee: totalFeeSats,
+    fee_histogram: histogram,
+  };
+});
+
 app.get("/mempool", async (_req, reply) => {
   try {
-    const entries = await getRawMempoolVerbose();
-    let count = 0;
-    let vsize = 0;
-    let totalFeeSats = 0;
-    // Group into fee-rate buckets in sat/vB.
-    const buckets: Array<{ feerate: number; vsize: number }> = [];
-    for (const [, e] of Object.entries(entries)) {
-      const feeTxc = e.fees?.base ?? e.fee ?? 0;
-      const feeSats = Math.round(feeTxc * 1e8);
-      const vs = e.vsize || e.size || 0;
-      if (vs <= 0) continue;
-      count++;
-      vsize += vs;
-      totalFeeSats += feeSats;
-      const rate = feeSats / vs; // sat/vB
-      buckets.push({ feerate: rate, vsize: vs });
-    }
-    // Sort DESC by feerate, then merge into coarse buckets so the payload
-    // stays small (mempool.space frontends expect ~O(bands), not O(txs)).
-    buckets.sort((a, b) => b.feerate - a.feerate);
-    const bands = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0];
-    const histogram: [number, number][] = [];
-    let bi = 0;
-    for (const band of bands) {
-      let sum = 0;
-      while (bi < buckets.length && buckets[bi].feerate >= band) {
-        sum += buckets[bi].vsize;
-        bi++;
-      }
-      if (sum > 0) histogram.push([band, sum]);
-    }
-    return reply.send({
-      count,
-      vsize,
-      total_fee: totalFeeSats,
-      fee_histogram: histogram,
-    });
+    return reply.send(await mempoolSummary());
   } catch (err) {
     console.error("[indexer] /mempool failed:", (err as Error).message);
     return reply.send({ count: 0, vsize: 0, total_fee: 0, fee_histogram: [] });
   }
 });
 
-// GET /mempool/txids — raw txid list
+// GET /mempool/txids — raw txid list, capped at 10,000 so a huge mempool
+// can't produce a multi-MB response body per request.
 app.get("/mempool/txids", async (_req, reply) => {
   try {
     const txids = await getRawMempool();
-    return reply.send(txids);
+    return reply.send(txids.slice(0, 10_000));
   } catch {
     return reply.send([]);
   }
