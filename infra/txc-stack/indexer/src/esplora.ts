@@ -2,6 +2,7 @@
 // Spec: https://github.com/Blockstream/esplora/blob/master/API.md
 
 import Fastify from "fastify";
+import { CompactParents, mapLimited, OverloadError, rewardWindow, WorkGate } from "./resource-controls.js";
 import { db, getTipHeight, getBlockHashAt } from "./db.js";
 import {
   getBlockCount,
@@ -15,6 +16,7 @@ import {
   getRawTx,
   rpc,
   RpcError,
+  rpcWorkStats,
   txcToSats,
   voutAddress,
   type RpcBlock,
@@ -26,6 +28,28 @@ import { addressTokens, addressOmniTxs, listProperties, propertyHolders, omniSta
 const PORT = Number(process.env.HTTP_PORT ?? 3001);
 
 const app = Fastify({ logger: false });
+const hydrationGate = new WorkGate(8, 0);
+const releases = new WeakMap<object, () => void>();
+app.addHook("onRequest", async (req, reply) => {
+  const path = req.url.split("?")[0];
+  if (!/^\/address\/[^/]+\/txs(?:\/|$)|^\/block\/[^/]+\/txs|^\/tx\/[^/]+$/.test(path)) return;
+  try { releases.set(req, await hydrationGate.acquire()); }
+  catch { return reply.code(503).header("retry-after", "5").send({ error: "History service busy; retry shortly" }); }
+});
+app.addHook("onResponse", async req => { releases.get(req)?.(); releases.delete(req); });
+app.setErrorHandler((error, _req, reply) => {
+  console.error(`[indexer] request failed: ${error.name}`);
+  reply.code(error instanceof OverloadError || error.name === "TimeoutError" || error.name === "AbortError" ? 503 : 500)
+    .send({ error: "Upstream unavailable; retry shortly" });
+});
+function createParents(signal?: AbortSignal) {
+  const parents = new CompactParents(async (id: string) => {
+    const tx = await getRawTx(id, signal);
+    // Do not retain parent vin, raw hex, or witness data for a whole page.
+    return tx.vout.map(v => ({ hex: v.scriptPubKey.hex, type: v.scriptPubKey.type }));
+  });
+  return { get: (id: string) => parents.get(id), signal };
+}
 
 // Accept raw hex bodies for POST /tx (Esplora broadcast spec).
 app.addContentTypeParser("text/plain", { parseAs: "string" }, (_req, body, done) =>
@@ -107,14 +131,14 @@ function mempoolStats(address: string): AddressStats {
 // We cache prevouts we resolve via RPC so a single page of address txs
 // doesn't fan out into hundreds of duplicate calls.
 
-async function toEsploraTx(tx: RpcTx, cache: Map<string, RpcTx>): Promise<unknown> {
+async function toEsploraTx(tx: RpcTx, cache: ReturnType<typeof createParents>): Promise<unknown> {
   const tipHeight = getTipHeight();
   const confirmed = !!tx.blockhash;
   const blockHeight = confirmed && tx.confirmations ? tipHeight - tx.confirmations + 1 : undefined;
 
   let totalIn = 0;
-  const vin = await Promise.all(
-    tx.vin.map(async (vi) => {
+  const vin = await mapLimited(tx.vin, 4, async (vi) => {
+      cache.signal?.throwIfAborted();
       if (vi.coinbase !== undefined) {
         return {
           is_coinbase: true,
@@ -139,21 +163,9 @@ async function toEsploraTx(tx: RpcTx, cache: Map<string, RpcTx>): Promise<unknow
       if (row) {
         prevAddress = row.address;
         prevValue = row.value;
-        // Pull scriptPubKey hex from cached prev tx if available
-        let prev = cache.get(vi.txid);
-        if (!prev) {
-          try {
-            prev = await getRawTx(vi.txid);
-            cache.set(vi.txid, prev);
-          } catch {
-            /* ignore */
-          }
-        }
-        const vo = prev?.vout[vi.vout];
-        if (vo) {
-          prevScript = vo.scriptPubKey.hex;
-          prevType = vo.scriptPubKey.type;
-        }
+        const prev = await cache.get(vi.txid);
+        const vo = prev[vi.vout];
+        if (vo) { prevScript = vo.hex; prevType = vo.type; }
       }
       totalIn += prevValue;
       return {
@@ -173,8 +185,7 @@ async function toEsploraTx(tx: RpcTx, cache: Map<string, RpcTx>): Promise<unknow
             }
           : null,
       };
-    }),
-  );
+    });
 
   let totalOut = 0;
   const vout = tx.vout.map((vo) => {
@@ -217,6 +228,9 @@ async function toEsploraTx(tx: RpcTx, cache: Map<string, RpcTx>): Promise<unknow
 app.get("/health", async () => ({
   ok: true,
   tip: getTipHeight(),
+  rpc: rpcWorkStats(),
+  hydration: hydrationGate.stats(),
+  memory: process.memoryUsage(),
 }));
 
 // ---------- broadcast + raw tx (Esplora spec) ----------
@@ -510,14 +524,16 @@ app.get<{ Params: { addr: string } }>("/address/:addr/txs/mempool", async ({ par
   const rows = db
     .prepare("SELECT txid FROM mempool_address_txs WHERE address = ?")
     .all(params.addr) as { txid: string }[];
-  const cache = new Map<string, RpcTx>();
+  const signal = AbortSignal.timeout(20_000);
+  const cache = createParents(signal);
   const out = [] as unknown[];
   for (const r of rows.slice(0, 50)) {
     try {
-      const tx = await getRawTx(r.txid);
+      const tx = await getRawTx(r.txid, signal);
       out.push(await toEsploraTx(tx, cache));
-    } catch {
-      /* dropped */
+    } catch (error) {
+      if (error instanceof RpcError && error.code === -5) continue;
+      throw error;
     }
   }
   return out;
@@ -546,7 +562,8 @@ async function listConfirmed(address: string, lastSeen: string | undefined, incl
     )
     .all(address, beforeHeight, beforeHeight, beforeTxid) as { txid: string; height: number }[];
 
-  const cache = new Map<string, RpcTx>();
+  const signal = AbortSignal.timeout(20_000);
+  const cache = createParents(signal);
   const out: unknown[] = [];
 
   if (includeMempool && !lastSeen) {
@@ -555,21 +572,20 @@ async function listConfirmed(address: string, lastSeen: string | undefined, incl
       .all(address) as { txid: string }[];
     for (const r of mp.slice(0, 50)) {
       try {
-        const tx = await getRawTx(r.txid);
+        const tx = await getRawTx(r.txid, signal);
         out.push(await toEsploraTx(tx, cache));
-      } catch {
-        /* skip */
+      } catch (error) {
+        if (error instanceof RpcError && error.code === -5) continue;
+        throw error;
       }
     }
   }
 
   for (const r of rows) {
     try {
-      const tx = await getRawTx(r.txid);
+      const tx = await getRawTx(r.txid, signal);
       out.push(await toEsploraTx(tx, cache));
-    } catch {
-      /* skip */
-    }
+    } catch (error) { throw error; }
   }
   return out;
 }
@@ -692,7 +708,7 @@ async function blockTxs(hash: string, start: number, reply: import("fastify").Fa
   try {
     const blk = await getBlockVerbose(hash);
     const slice = blk.tx.slice(s, s + 25);
-    const cache = new Map<string, RpcTx>();
+    const cache = createParents();
     const out: unknown[] = [];
     for (const tx of slice) out.push(await toEsploraTx(tx, cache));
     return reply.send(out);
@@ -706,7 +722,7 @@ app.get<{ Params: { txid: string } }>("/tx/:txid", async ({ params }, reply) => 
   if (!/^[0-9a-fA-F]{64}$/.test(params.txid)) return reply.code(400).send("invalid txid");
   try {
     const tx = await getRawTx(params.txid);
-    const cache = new Map<string, RpcTx>();
+    const cache = createParents();
     return reply.send(await toEsploraTx(tx, cache));
   } catch {
     return reply.code(404).type("text/plain").send("not found");
@@ -1063,7 +1079,7 @@ app.get<{ Params: { w: string } }>("/v1/mining/difficulty-adjustments/:w", async
 // Reward stats over the last N blocks (getblockstats: subsidy + fees, in sats).
 const rewardCache = new Map<number, { at: number; val: unknown }>();
 app.get<{ Params: { n: string } }>("/v1/mining/reward-stats/:n", async ({ params }, reply) => {
-  const n = Math.min(Math.max(Number(params.n) || 100, 1), 500);
+  const n = rewardWindow(params.n);
   const c = rewardCache.get(n);
   if (c && Date.now() - c.at < 120_000) return reply.send(c.val);
   try {
