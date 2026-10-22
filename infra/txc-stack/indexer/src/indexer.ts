@@ -19,6 +19,7 @@ import { rollbackOmni } from "./omni.js";
 
 const POLL_MS = Number(process.env.POLL_MS ?? 5_000);
 const MEMPOOL_REFRESH_MS = Number(process.env.MEMPOOL_REFRESH_MS ?? 15_000);
+const MAX_ROLLBACK_PER_PASS = Number(process.env.MAX_ROLLBACK_PER_PASS ?? 100);
 
 const insertBlock = db.prepare(
   "INSERT OR REPLACE INTO blocks(height, hash, time) VALUES (?, ?, ?)",

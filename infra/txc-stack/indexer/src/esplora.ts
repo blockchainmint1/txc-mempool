@@ -8,6 +8,7 @@ import {
   getBlockCount,
   getBlockHash,
   getBlockVerbose,
+  getBlockVerbose1,
   getRawMempool,
   getRawMempoolVerbose,
   getMempoolInfo,
@@ -79,6 +80,7 @@ app.addHook("onSend", async (_req, reply, payload) => {
   reply.header("access-control-allow-origin", "*");
   reply.header("access-control-allow-methods", "GET, OPTIONS");
   reply.header("access-control-allow-headers", "Content-Type");
+  reply.header("access-control-expose-headers", "X-Truncated");
   return payload;
 });
 app.options("/*", async (_req, reply) => reply.code(204).send());
