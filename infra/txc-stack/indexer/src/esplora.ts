@@ -880,28 +880,34 @@ app.get("/mempool/txids", async (_req, reply) => {
 // Fees come from getrawmempool verbose (Core computes them from prevouts,
 // including chains of unconfirmed txs) so we don't have to resolve inputs
 // ourselves.
+// Memoized (10s): the verbose mempool fetch is the expensive part and every
+// cache miss used to redo it.
+const mempoolRecent = memo(10_000, async () => {
+  const entries = await getRawMempoolVerbose();
+  // Sort by mempool arrival time DESC and take the top 10.
+  const rows = Object.entries(entries)
+    .map(([txid, e]) => ({ txid, e }))
+    .sort((a, b) => (b.e.time ?? 0) - (a.e.time ?? 0))
+    .slice(0, 10);
+  const out: unknown[] = [];
+  for (const { txid, e } of rows) {
+    const feeTxc = e.fees?.base ?? e.fee ?? 0;
+    const feeSats = Math.round(feeTxc * 1e8);
+    let value = 0;
+    try {
+      const tx = await getRawTx(txid);
+      value = tx.vout.reduce((a, v) => a + txcToSats(v.value), 0);
+    } catch {
+      /* keep value=0 if tx dropped between calls */
+    }
+    out.push({ txid, fee: feeSats, vsize: e.vsize || e.size || 0, value });
+  }
+  return out;
+});
+
 app.get("/mempool/recent", async (_req, reply) => {
   try {
-    const entries = await getRawMempoolVerbose();
-    // Sort by mempool arrival time DESC and take the top 10.
-    const rows = Object.entries(entries)
-      .map(([txid, e]) => ({ txid, e }))
-      .sort((a, b) => (b.e.time ?? 0) - (a.e.time ?? 0))
-      .slice(0, 10);
-    const out: unknown[] = [];
-    for (const { txid, e } of rows) {
-      const feeTxc = e.fees?.base ?? e.fee ?? 0;
-      const feeSats = Math.round(feeTxc * 1e8);
-      let value = 0;
-      try {
-        const tx = await getRawTx(txid);
-        value = tx.vout.reduce((a, v) => a + txcToSats(v.value), 0);
-      } catch {
-        /* keep value=0 if tx dropped between calls */
-      }
-      out.push({ txid, fee: feeSats, vsize: e.vsize || e.size || 0, value });
-    }
-    return reply.send(out);
+    return reply.send(await mempoolRecent());
   } catch (err) {
     console.error("[indexer] /mempool/recent failed:", (err as Error).message);
     return reply.send([]);
