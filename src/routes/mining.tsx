@@ -21,6 +21,8 @@ export const Route = createFileRoute("/mining")({
       { name: "description", content: "TEXITcoin mining: network hashrate, difficulty adjustment, pool distribution, and recent blocks." },
       { property: "og:title", content: "TXC Mining" },
       { property: "og:description", content: "Network hashrate, difficulty, and pool distribution for the TEXITcoin chain." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: MiningPage,

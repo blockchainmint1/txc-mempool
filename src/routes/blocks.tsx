@@ -11,6 +11,8 @@ export const Route = createFileRoute("/blocks")({
       { name: "description", content: "Browse recent TEXITcoin blocks: height, age, transactions, size, miner, fees." },
       { property: "og:title", content: "TEXITcoin Blocks" },
       { property: "og:description", content: "Recent blocks on the TXC chain." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: BlocksPage,

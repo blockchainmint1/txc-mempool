@@ -10,6 +10,8 @@ export const Route = createFileRoute("/docs")({
       { name: "description", content: "Public REST and WebSocket API for the TEXITcoin block explorer. Drop-in compatible with mempool.space patterns." },
       { property: "og:title", content: "TXC Mempool — Public API" },
       { property: "og:description", content: "REST + WebSocket endpoints for chain tip, blocks, transactions, addresses, mempool, fees, mining, and TXC-only extras (price, supply, Omni decoding)." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: DocsPage,

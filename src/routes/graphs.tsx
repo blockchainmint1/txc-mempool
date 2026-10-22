@@ -26,6 +26,8 @@ export const Route = createFileRoute("/graphs")({
       { name: "description", content: "TEXITcoin chain charts: block sizes, fees, rewards, and tx counts over day, week, month, or 3 months." },
       { property: "og:title", content: "TXC Graphs" },
       { property: "og:description", content: "Charts of recent TEXITcoin chain activity." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: GraphsPage,

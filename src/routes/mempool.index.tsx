@@ -13,6 +13,10 @@ export const Route = createFileRoute("/mempool/")({
     meta: [
       { title: "Mempool — Live unconfirmed TXC transactions" },
       { name: "description", content: "What's currently in the TEXITcoin mempool: projected blocks, fee histogram, and the most recent unconfirmed transactions." },
+      { property: "og:title", content: "Mempool — Live unconfirmed TXC transactions" },
+      { property: "og:description", content: "What's currently in the TEXITcoin mempool: projected blocks, fee histogram, and the most recent unconfirmed transactions." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: MempoolPage,

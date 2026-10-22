@@ -18,6 +18,8 @@ export const Route = createFileRoute("/richlist")({
       { name: "description", content: "Top 100 TEXITcoin wallets ranked by confirmed unspent balance. Live data from the on-chain address indexer." },
       { property: "og:title", content: "TXC Richlist — Top 100 Wallets" },
       { property: "og:description", content: "Top 100 TEXITcoin wallets ranked by confirmed unspent balance." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: RichlistPage,

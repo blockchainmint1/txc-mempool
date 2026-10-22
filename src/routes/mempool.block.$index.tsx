@@ -13,6 +13,10 @@ export const Route = createFileRoute("/mempool/block/$index")({
     meta: [
       { title: "Projected mempool block — TEXITcoin" },
       { name: "description", content: "Live treemap of transactions waiting to confirm in an upcoming TXC block." },
+      { property: "og:title", content: "Projected mempool block — TEXITcoin" },
+      { property: "og:description", content: "Live treemap of transactions waiting to confirm in an upcoming TXC block." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: BlockVizPage,
