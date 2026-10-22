@@ -160,7 +160,7 @@ if [[ "$restarts" =~ ^[0-9]+$ ]]; then
   printf '%s\n' "$restarts" > "$STATE_DIR/indexer-restarts"
 fi
 
-heap_warning=$(curl -s -m 5 http://127.0.0.1:3001/health 2>/dev/null | python3 -c 'import json,sys
+heap_warning=$(docker exec txc-indexer curl -s -m 5 http://127.0.0.1:3001/health 2>/dev/null | python3 -c 'import json,sys
 try:
     h=json.load(sys.stdin).get("memory",{}).get("heapUsed",0)
     print(1 if h > 3*1024**3 else 0)
