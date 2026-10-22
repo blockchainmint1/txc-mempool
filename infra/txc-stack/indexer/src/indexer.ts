@@ -6,6 +6,7 @@
 import {
   getBlockCount,
   getBlockHash,
+  getBlockHashDirect,
   getBlockVerbose,
   getRawMempool,
   getRawTx,
