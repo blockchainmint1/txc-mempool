@@ -27,7 +27,7 @@ import { addressTokens, addressOmniTxs, listProperties, propertyHolders, omniSta
 
 const PORT = Number(process.env.HTTP_PORT ?? 3001);
 
-const app = Fastify({ logger: false });
+const app = Fastify({ logger: false, connectionTimeout: 30_000, requestTimeout: 30_000 });
 const hydrationGate = new WorkGate(8, 0);
 const releases = new WeakMap<object, () => void>();
 const requestSignals = new WeakMap<object, AbortSignal>();
