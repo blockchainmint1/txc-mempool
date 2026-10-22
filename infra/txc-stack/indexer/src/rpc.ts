@@ -2,13 +2,16 @@
 // We deliberately avoid the heavy bitcoin-core npm clients — TexitCoin uses
 // the same RPC surface as Bitcoin Core but we only need a handful of calls.
 
-import { WorkGate } from "./resource-controls.js";
+import { OverloadError, WorkGate } from "./resource-controls.js";
 
 const RPC_URL = process.env.RPC_URL ?? "http://host.docker.internal:15739";
 const RPC_USER = process.env.RPC_USER ?? "";
 const RPC_PASS = process.env.RPC_PASSWORD ?? "";
 const RPC_TIMEOUT_MS = Number(process.env.RPC_TIMEOUT_MS ?? 10_000);
-const rpcGate = new WorkGate(16, 64);
+const RPC_MAX_INFLIGHT = Number(process.env.RPC_MAX_INFLIGHT ?? 16);
+const RPC_MAX_QUEUE = Number(process.env.RPC_MAX_QUEUE ?? 200);
+const RPC_DEBUG = process.env.RPC_DEBUG === "true";
+const rpcGate = new WorkGate(RPC_MAX_INFLIGHT, RPC_MAX_QUEUE);
 export const rpcWorkStats = () => rpcGate.stats();
 
 const AUTH = "Basic " + Buffer.from(`${RPC_USER}:${RPC_PASS}`).toString("base64");
