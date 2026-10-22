@@ -494,36 +494,48 @@ app.get<{
   };
 });
 
-// GET /address/:addr/utxo
-app.get<{ Params: { addr: string } }>("/address/:addr/utxo", async ({ params }) => {
-  const rows = db
-    .prepare(
-      `SELECT o.txid, o.vout, o.value, o.height, b.hash AS block_hash, b.time AS block_time
-       FROM outputs o
-       JOIN blocks b ON b.height = o.height
-       WHERE o.address = ? AND o.spent_txid IS NULL
-       ORDER BY o.height DESC, o.txid, o.vout`,
-    )
-    .all(params.addr) as Array<{
-    txid: string;
-    vout: number;
-    value: number;
-    height: number;
-    block_hash: string;
-    block_time: number;
-  }>;
-  return rows.map((r) => ({
-    txid: r.txid,
-    vout: r.vout,
-    value: r.value,
-    status: {
-      confirmed: true,
-      block_height: r.height,
-      block_hash: r.block_hash,
-      block_time: r.block_time,
-    },
-  }));
-});
+// GET /address/:addr/utxo — bounded: ?limit= (default 1000, max 5000).
+// Mining-pool payout addresses can accumulate tens of thousands of UTXOs;
+// returning them all in one body is how the heap blows up. When rows are
+// left over we set X-Truncated: true so callers know the list is partial.
+app.get<{ Params: { addr: string }; Querystring: { limit?: string } }>(
+  "/address/:addr/utxo",
+  async ({ params, query }, reply) => {
+    const limit = Math.min(Math.max(Number(query.limit) || 1000, 1), 5000);
+    const rows = db
+      .prepare(
+        `SELECT o.txid, o.vout, o.value, o.height, b.hash AS block_hash, b.time AS block_time
+          FROM outputs o
+         JOIN blocks b ON b.height = o.height
+         WHERE o.address = ? AND o.spent_txid IS NULL
+         ORDER BY o.height DESC, o.txid, o.vout
+         LIMIT ?`,
+      )
+      .all(params.addr, limit + 1) as Array<{
+      txid: string;
+      vout: number;
+      value: number;
+      height: number;
+      block_hash: string;
+      block_time: number;
+    }>;
+    if (rows.length > limit) {
+      reply.header("x-truncated", "true");
+      rows.length = limit;
+    }
+    return rows.map((r) => ({
+      txid: r.txid,
+      vout: r.vout,
+      value: r.value,
+      status: {
+        confirmed: true,
+        block_height: r.height,
+        block_hash: r.block_hash,
+        block_time: r.block_time,
+      },
+    }));
+  },
+);
 
 // GET /address/:addr/txs            → mempool (up to 50) + 25 most recent confirmed
 // GET /address/:addr/txs/chain/:last → next 25 confirmed after :last
