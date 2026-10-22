@@ -1,4 +1,7 @@
 - [x] Bound indexer RPC work and transaction hydration; prevent partial history on overload.
 - [x] Add history/restart/memory monitoring and safe heap headroom.
 - [x] Run regression tests and prepare exact server update instructions.
-- [ ] Verify on production after Bobby installs the update (requires box access).
+- [x] Verify Phase 1 deployment from Bobby's successful server health/history output.
+- [ ] Implement Phase 2 wallet connection, request, RPC, and compact mempool limits.
+- [ ] Run Phase 2 regression checks and prepare an isolated wallet-service update.
+- [ ] Verify Phase 2 on production after Bobby installs it (requires box access).
