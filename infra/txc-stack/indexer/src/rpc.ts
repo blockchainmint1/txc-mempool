@@ -54,7 +54,17 @@ function isRetryable(err: unknown): boolean {
 const NON_IDEMPOTENT = new Set(["sendrawtransaction"]);
 
 export async function rpc<T = unknown>(method: string, params: unknown[] = [], signal?: AbortSignal): Promise<T> {
-  const release = await rpcGate.acquire(signal);
+  let release: () => void;
+  try {
+    release = await rpcGate.acquire(signal);
+  } catch (err) {
+    if (err instanceof OverloadError) throw new RpcError(503, "rpc queue full");
+    throw err;
+  }
+  if (RPC_DEBUG) {
+    const s = rpcGate.stats();
+    console.log(`[rpc] ${method} inflight=${s.active}/${RPC_MAX_INFLIGHT} queued=${s.queued}/${RPC_MAX_QUEUE}`);
+  }
   try {
   const attempts = NON_IDEMPOTENT.has(method) ? 1 : RPC_RETRIES;
   let lastErr: unknown;
