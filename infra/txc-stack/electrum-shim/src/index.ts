@@ -9,6 +9,9 @@ import { handle, RpcFault, getTip, statusFor } from "./methods.js";
 import { operationalStats, refreshScripthashMap } from "./db.js";
 import { startFeeWarmer } from "./fees.js";
 import { mempoolSnapshotStats, startMempoolWatcher } from "./mempool.js";
+import { closeWhenIdle, dispatch } from "./protocol.js";
+import { positiveInteger, TokenBucket } from "./resource-controls.js";
+import { rpcWorkStats } from "./rpc.js";
 
 const TCP_PORT = Number(process.env.TCP_PORT ?? 50001);
 const TLS_PORT = Number(process.env.TLS_PORT ?? 50002);
@@ -23,6 +26,7 @@ const LOG_REQUESTS = process.env.LOG_REQUESTS === "true";
 const LOG_CONNECTIONS = process.env.LOG_CONNECTIONS !== "false";
 const methodCounts = new Map<string, number>();
 const MAX_LINE = 2 * 1024 * 1024;
+const MAX_CLIENTS = positiveInteger(process.env.MAX_CLIENTS, 500);
 
 interface Client {
   socket: net.Socket;
@@ -30,6 +34,7 @@ interface Client {
   transport: "tcp" | "tls";
   headersSub: boolean;
   scripthashSubs: Map<string, string | null>;
+  bucket: TokenBucket;
   /** Client name from server.version, e.g. "TXC Wallet" or "healthcheck". */
   name?: string;
 }
@@ -149,31 +154,21 @@ async function onLine(line: string, c: Client): Promise<void> {
     send(c, { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } });
     return;
   }
-  // Batch requests: electrum-client uses these heavily (getHistoryBatch,
-  // listunspentBatch, transaction.getBatch) — the reply must be an array.
-  if (Array.isArray(parsed)) {
-    if (parsed.length === 0) {
-      send(c, { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request" } });
-      return;
-    }
-    const out = await Promise.all(
-      parsed.map((r) => handleOne(r as Record<string, unknown>, c)),
-    );
-    send(c, out);
-    return;
-  }
-  send(c, await handleOne(parsed as Record<string, unknown>, c));
+  send(c, await dispatch(parsed, c.bucket, req => handleOne(req, c)));
 }
 
 function attach(socket: net.Socket, transport: "tcp" | "tls"): void {
+  if (clients.size >= MAX_CLIENTS) { socket.destroy(); return; }
   socket.setNoDelay(true);
   socket.setKeepAlive(true, 30_000);
+  closeWhenIdle(socket);
   const c: Client = {
     socket,
     buf: "",
     transport,
     headersSub: false,
     scripthashSubs: new Map(),
+    bucket: new TokenBucket(),
   };
   clients.add(c);
 
@@ -290,7 +285,9 @@ function start(): void {
   startFeeWarmer();
   startMempoolWatcher();
 
-  net.createServer((socket) => attach(socket, "tcp")).listen(TCP_PORT, () =>
+  const tcpServer = net.createServer((socket) => attach(socket, "tcp"));
+  tcpServer.maxConnections = MAX_CLIENTS;
+  tcpServer.listen(TCP_PORT, () =>
     console.log(`[electrum] TCP listening on ${TCP_PORT}`),
   );
 
@@ -301,13 +298,16 @@ function start(): void {
           cert: fs.readFileSync(TLS_CERT),
           key: fs.readFileSync(TLS_KEY),
           minVersion: "TLSv1.2",
+          handshakeTimeout: 10_000,
         },
         (socket) => attach(socket, "tls"),
       );
     // The secure-connection callback above runs only after a successful TLS
     // handshake. Log the underlying TCP arrival and handshake failures too so
     // an iOS trust/ATS failure is distinguishable from DNS or firewall trouble.
+    tlsServer.maxConnections = MAX_CLIENTS;
     tlsServer.on("connection", (socket) => {
+      if (clients.size >= MAX_CLIENTS) { socket.destroy(); return; }
       if (LOG_CONNECTIONS) {
         console.log(`[electrum] TLS TCP arrival from ${peerLabel(socket)}`);
       }
@@ -337,7 +337,8 @@ function start(): void {
           `map_refresh=${mapRefreshRunning ? "running" : "idle"}, map_ms=${lastMapStats.ms}, ` +
           `clients=${clients.size}, requests=${requestCount}, ` +
           `errors=${errorCount}, slow=${slowRequestCount}, ` +
-          `mempool=${mempoolSnapshotStats().txids}tx/${mempoolSnapshotStats().addresses}addr`,
+          `mempool=${mempoolSnapshotStats().txids}tx/${mempoolSnapshotStats().addresses}addr, ` +
+          `rpc_active=${rpcWorkStats().active}, rpc_queued=${rpcWorkStats().queued}`,
       );
       const top = [...methodCounts.entries()]
         .sort((a, b) => b[1] - a[1])

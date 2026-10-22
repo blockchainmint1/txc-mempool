@@ -16,6 +16,7 @@ import { getFeeEstimate, getRelayFee } from "./fees.js";
 import { isSpentInMempool, pendingCredit, pendingUtxos } from "./mempool.js";
 import { merkleBranch } from "./merkle.js";
 import { historyStatus } from "./scripthash.js";
+import { headerCount, MAX_HEADERS, mapLimited } from "./resource-controls.js";
 import {
   getBlockCount,
   getBlockHash,
@@ -150,7 +151,7 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
     }
     case "blockchain.block.headers": {
       const start = Number(params[0]);
-      const count = Math.min(Number(params[1]) || 0, 2016);
+      const count = headerCount(params[1]);
       const parts: string[] = [];
       for (let h = start; h < start + count; h++) {
         try {
@@ -159,7 +160,7 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
           break;
         }
       }
-      return { count: parts.length, hex: parts.join(""), max: 2016 };
+      return { count: parts.length, hex: parts.join(""), max: MAX_HEADERS };
     }
 
     // ---- fees ----
@@ -251,8 +252,7 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
       const txid = String(params[0]);
       const tx = (await getRawTxVerbose(txid)) as Record<string, any>;
       const vin: any[] = Array.isArray(tx.vin) ? tx.vin : [];
-      await Promise.all(
-        vin.slice(0, 100).map(async (input) => {
+      await mapLimited(vin.slice(0, 100), 4, async (input) => {
           if (!input || typeof input.txid !== "string") return; // coinbase
           try {
             const prev = (await getRawTxVerbose(input.txid)) as Record<string, any>;
@@ -266,8 +266,7 @@ export async function handle(method: string, params: unknown[]): Promise<unknown
           } catch {
             // A missing/pruned parent must not fail the whole lookup.
           }
-        }),
-      );
+        });
       return tx;
     }
 
