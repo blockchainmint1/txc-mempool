@@ -1,4 +1,8 @@
 - [x] Bound indexer RPC work and transaction hydration; prevent partial history on overload.
 - [x] Add history/restart/memory monitoring and safe heap headroom.
 - [x] Run regression tests and prepare exact server update instructions.
-- [ ] Verify on production after Bobby installs the update (requires box access).
+- [x] Verify Phase 1 deployment from Bobby's successful server health/history output.
+- [x] Implement and regression-test Phase 2 wallet connection, request, RPC, and compact mempool limits (10 wallet-service and 10 indexer tests passed).
+- [ ] Resolve deployment compatibility: uploaded wallet code sends 100–200-request batches, exceeding the audit's 50-entry cap and 40-request burst (requires Bobby's decision).
+- [ ] Prepare isolated wallet-service update after the compatibility decision; never overwrite live Compose, nginx, or .env.
+- [ ] Verify Phase 2 on production after Bobby installs it (requires box access and real wallet refresh/send checks).

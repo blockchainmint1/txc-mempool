@@ -3,6 +3,12 @@
 // "Service Unavailable") under load, which must be a retryable error rather
 // than a JSON parse crash that takes the process down.
 
+import { OverloadError, positiveInteger, WorkGate } from "./resource-controls.js";
+
+const rpcGate = new WorkGate(positiveInteger(process.env.RPC_MAX_INFLIGHT, 8),
+  positiveInteger(process.env.RPC_MAX_QUEUE, 200));
+export const rpcWorkStats = () => rpcGate.stats();
+
 const RPC_URL = process.env.RPC_URL ?? "http://host.docker.internal:15739";
 const RPC_USER = process.env.RPC_USER ?? "";
 const RPC_PASS = process.env.RPC_PASSWORD ?? "";
@@ -24,6 +30,17 @@ export class RpcError extends Error {
 }
 
 export async function rpc<T = unknown>(method: string, params: unknown[] = []): Promise<T> {
+  let release: () => void;
+  try { release = await rpcGate.acquire(); }
+  catch (error) {
+    if (error instanceof OverloadError) throw new RpcError(503, "rpc queue full");
+    throw error;
+  }
+  try { return await rpcOnce<T>(method, params); }
+  finally { release(); }
+}
+
+async function rpcOnce<T>(method: string, params: unknown[]): Promise<T> {
   const id = nextId++;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), RPC_TIMEOUT_MS);

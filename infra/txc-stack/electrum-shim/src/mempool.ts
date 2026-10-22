@@ -16,6 +16,7 @@
 
 import { getRawMempoolTxids, getRawTxVerbose } from "./rpc.js";
 import { mapAddresses } from "./db.js";
+import { compactTx, type CompactTx } from "./compact-mempool.js";
 
 const REFRESH_MS = Number(process.env.MEMPOOL_SNAPSHOT_MS ?? 8_000);
 
@@ -44,20 +45,13 @@ let snapshot: Snapshot = {
 
 // Decoded mempool transactions, keyed by txid. Mempool txs are immutable, so a
 // tx only ever has to be fetched from the node once.
-const txCache = new Map<string, Record<string, any>>();
+const txCache = new Map<string, CompactTx>();
 let refreshing = false;
 
 function toSats(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value ?? 0);
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 1e8);
-}
-
-function addressesOf(vout: Record<string, any>): string[] {
-  const spk = vout?.scriptPubKey ?? {};
-  if (typeof spk.address === "string") return [spk.address];
-  if (Array.isArray(spk.addresses)) return spk.addresses.filter((a: unknown) => typeof a === "string");
-  return [];
 }
 
 async function refresh(): Promise<void> {
@@ -75,22 +69,22 @@ async function refresh(): Promise<void> {
       let tx = txCache.get(txid);
       if (!tx) {
         try {
-          tx = (await getRawTxVerbose(txid)) as Record<string, any>;
+          tx = compactTx(await getRawTxVerbose(txid));
         } catch {
           continue; // evicted between the listing and the fetch
         }
         txCache.set(txid, tx);
       }
 
-      for (const input of (tx.vin ?? []) as Record<string, any>[]) {
+      for (const input of tx.vin) {
         if (typeof input?.txid === "string" && typeof input?.vout === "number") {
           spent.add(`${input.txid}:${input.vout}`);
         }
       }
-      for (const vout of (tx.vout ?? []) as Record<string, any>[]) {
+      for (const vout of tx.vout) {
         const value = toSats(vout?.value);
         if (value <= 0) continue;
-        for (const address of addressesOf(vout)) {
+        for (const address of vout.addresses) {
           const list = pendingByAddress.get(address) ?? [];
           list.push({ tx_hash: txid, tx_pos: Number(vout.n ?? 0), height: 0, value });
           pendingByAddress.set(address, list);
